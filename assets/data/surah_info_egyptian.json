@@ -1,0 +1,1447 @@
+{
+ "description": "بيانات رؤوس السور كما تُطبع في المصاحف المصرية (ومنها طبعة الشمرلي): نوع السورة واستثناءاتها وعدد آياتها والسورة التي نزلت بعدها.",
+ "sources": [
+  "جدول «ترتيب سور القرآن العددي والمكاني والزماني» في كتاب «تاريخ القرآن» لمحمد حسين علي الصغير (مكتبة العتبة العباسية: alkafeel.net)",
+  "صفحات «تعريف السورة» في موقع e-quran.com (مصدر ثانٍ للمقارنة)",
+  "ترتيب النزول من قاعدة بيانات البرنامج (Quran.com)، وهو الترتيب المعتمد في المصحف المصري"
+ ],
+ "surahs": [
+  {
+   "number": 1,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 5,
+   "revealed_after": 74,
+   "verses_count": 7
+  },
+  {
+   "number": 2,
+   "type": "مدنية",
+   "exceptions": [
+    {
+     "verses": [
+      281
+     ],
+     "place": "فنزلت بمنى في حجة الوداع"
+    }
+   ],
+   "note": "",
+   "revelation_order": 87,
+   "revealed_after": 83,
+   "verses_count": 286
+  },
+  {
+   "number": 3,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 89,
+   "revealed_after": 8,
+   "verses_count": 200
+  },
+  {
+   "number": 4,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 92,
+   "revealed_after": 60,
+   "verses_count": 176
+  },
+  {
+   "number": 5,
+   "type": "مدنية",
+   "exceptions": [
+    {
+     "verses": [
+      3
+     ],
+     "place": "فنزلت بعرفات في حجة الوداع"
+    }
+   ],
+   "note": "",
+   "revelation_order": 112,
+   "revealed_after": 48,
+   "verses_count": 120
+  },
+  {
+   "number": 6,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      20,
+      23,
+      91,
+      93,
+      114,
+      141,
+      151,
+      152,
+      153
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 55,
+   "revealed_after": 15,
+   "verses_count": 165
+  },
+  {
+   "number": 7,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      163,
+      164,
+      165,
+      166,
+      167,
+      168,
+      169,
+      170
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 39,
+   "revealed_after": 38,
+   "verses_count": 206
+  },
+  {
+   "number": 8,
+   "type": "مدنية",
+   "exceptions": [
+    {
+     "verses": [
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36
+     ],
+     "kind": "مكية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 88,
+   "revealed_after": 2,
+   "verses_count": 75
+  },
+  {
+   "number": 9,
+   "type": "مدنية",
+   "exceptions": [
+    {
+     "verses": [
+      128,
+      129
+     ],
+     "kind": "مكية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 113,
+   "revealed_after": 5,
+   "verses_count": 129
+  },
+  {
+   "number": 10,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      40,
+      94,
+      95,
+      96
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 51,
+   "revealed_after": 17,
+   "verses_count": 109
+  },
+  {
+   "number": 11,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      12,
+      17,
+      114
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 52,
+   "revealed_after": 10,
+   "verses_count": 123
+  },
+  {
+   "number": 12,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      1,
+      2,
+      3,
+      7
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 53,
+   "revealed_after": 11,
+   "verses_count": 111
+  },
+  {
+   "number": 13,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 96,
+   "revealed_after": 47,
+   "verses_count": 43
+  },
+  {
+   "number": 14,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      28,
+      29
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 72,
+   "revealed_after": 71,
+   "verses_count": 52
+  },
+  {
+   "number": 15,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      87
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 54,
+   "revealed_after": 12,
+   "verses_count": 99
+  },
+  {
+   "number": 16,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      126,
+      127,
+      128
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 70,
+   "revealed_after": 18,
+   "verses_count": 128
+  },
+  {
+   "number": 17,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      26,
+      32,
+      33,
+      57,
+      73,
+      74,
+      75,
+      76,
+      77,
+      78,
+      79,
+      80
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 50,
+   "revealed_after": 28,
+   "verses_count": 111
+  },
+  {
+   "number": 18,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      28,
+      83,
+      84,
+      85,
+      86,
+      87,
+      88,
+      89,
+      90,
+      91,
+      92,
+      93,
+      94,
+      95,
+      96,
+      97,
+      98,
+      99,
+      100,
+      101
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 69,
+   "revealed_after": 88,
+   "verses_count": 110
+  },
+  {
+   "number": 19,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      58,
+      71
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 44,
+   "revealed_after": 35,
+   "verses_count": 98
+  },
+  {
+   "number": 20,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      130,
+      131
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 45,
+   "revealed_after": 19,
+   "verses_count": 135
+  },
+  {
+   "number": 21,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 73,
+   "revealed_after": 14,
+   "verses_count": 112
+  },
+  {
+   "number": 22,
+   "type": "مدنية",
+   "exceptions": [
+    {
+     "verses": [
+      52,
+      53,
+      54,
+      55
+     ],
+     "place": "فبين مكة والمدينة"
+    }
+   ],
+   "note": "",
+   "revelation_order": 103,
+   "revealed_after": 24,
+   "verses_count": 78
+  },
+  {
+   "number": 23,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 74,
+   "revealed_after": 21,
+   "verses_count": 118
+  },
+  {
+   "number": 24,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 102,
+   "revealed_after": 59,
+   "verses_count": 64
+  },
+  {
+   "number": 25,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      68,
+      69,
+      70
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 42,
+   "revealed_after": 36,
+   "verses_count": 77
+  },
+  {
+   "number": 26,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      197,
+      224,
+      225,
+      226,
+      227
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 47,
+   "revealed_after": 56,
+   "verses_count": 227
+  },
+  {
+   "number": 27,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 48,
+   "revealed_after": 26,
+   "verses_count": 93
+  },
+  {
+   "number": 28,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      52,
+      53,
+      54,
+      55
+     ],
+     "kind": "مدنية"
+    },
+    {
+     "verses": [
+      85
+     ],
+     "place": "فبالجحفة أثناء الهجرة"
+    }
+   ],
+   "note": "",
+   "revelation_order": 49,
+   "revealed_after": 27,
+   "verses_count": 88
+  },
+  {
+   "number": 29,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 85,
+   "revealed_after": 30,
+   "verses_count": 69
+  },
+  {
+   "number": 30,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      17
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 84,
+   "revealed_after": 84,
+   "verses_count": 60
+  },
+  {
+   "number": 31,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      27,
+      28,
+      29
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 57,
+   "revealed_after": 37,
+   "verses_count": 34
+  },
+  {
+   "number": 32,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      16,
+      17,
+      18,
+      19,
+      20
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 75,
+   "revealed_after": 23,
+   "verses_count": 30
+  },
+  {
+   "number": 33,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 90,
+   "revealed_after": 3,
+   "verses_count": 73
+  },
+  {
+   "number": 34,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      6
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 58,
+   "revealed_after": 31,
+   "verses_count": 54
+  },
+  {
+   "number": 35,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 43,
+   "revealed_after": 25,
+   "verses_count": 45
+  },
+  {
+   "number": 36,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      45
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 41,
+   "revealed_after": 72,
+   "verses_count": 83
+  },
+  {
+   "number": 37,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 56,
+   "revealed_after": 6,
+   "verses_count": 182
+  },
+  {
+   "number": 38,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 38,
+   "revealed_after": 54,
+   "verses_count": 88
+  },
+  {
+   "number": 39,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      52,
+      53,
+      54
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 59,
+   "revealed_after": 34,
+   "verses_count": 75
+  },
+  {
+   "number": 40,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      56,
+      57
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 60,
+   "revealed_after": 39,
+   "verses_count": 85
+  },
+  {
+   "number": 41,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 61,
+   "revealed_after": 40,
+   "verses_count": 54
+  },
+  {
+   "number": 42,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      23,
+      24,
+      25,
+      27
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 62,
+   "revealed_after": 41,
+   "verses_count": 53
+  },
+  {
+   "number": 43,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      54
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 63,
+   "revealed_after": 42,
+   "verses_count": 89
+  },
+  {
+   "number": 44,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 64,
+   "revealed_after": 43,
+   "verses_count": 59
+  },
+  {
+   "number": 45,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      14
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 65,
+   "revealed_after": 44,
+   "verses_count": 37
+  },
+  {
+   "number": 46,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      10,
+      15,
+      35
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 66,
+   "revealed_after": 45,
+   "verses_count": 35
+  },
+  {
+   "number": 47,
+   "type": "مدنية",
+   "exceptions": [
+    {
+     "verses": [
+      13
+     ],
+     "place": "فنزلت في الطريق أثناء الهجرة"
+    }
+   ],
+   "note": "",
+   "revelation_order": 95,
+   "revealed_after": 57,
+   "verses_count": 38
+  },
+  {
+   "number": 48,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "وقد نزلت في الطريق عند الانصراف من الحديبية",
+   "revelation_order": 111,
+   "revealed_after": 62,
+   "verses_count": 29
+  },
+  {
+   "number": 49,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 106,
+   "revealed_after": 58,
+   "verses_count": 18
+  },
+  {
+   "number": 50,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      38
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 34,
+   "revealed_after": 77,
+   "verses_count": 45
+  },
+  {
+   "number": 51,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 67,
+   "revealed_after": 46,
+   "verses_count": 60
+  },
+  {
+   "number": 52,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 76,
+   "revealed_after": 32,
+   "verses_count": 49
+  },
+  {
+   "number": 53,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      32
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 23,
+   "revealed_after": 112,
+   "verses_count": 62
+  },
+  {
+   "number": 54,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      44,
+      45,
+      46
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 37,
+   "revealed_after": 86,
+   "verses_count": 55
+  },
+  {
+   "number": 55,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 97,
+   "revealed_after": 13,
+   "verses_count": 78
+  },
+  {
+   "number": 56,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      81,
+      82
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 46,
+   "revealed_after": 20,
+   "verses_count": 96
+  },
+  {
+   "number": 57,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 94,
+   "revealed_after": 99,
+   "verses_count": 29
+  },
+  {
+   "number": 58,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 105,
+   "revealed_after": 63,
+   "verses_count": 22
+  },
+  {
+   "number": 59,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 101,
+   "revealed_after": 98,
+   "verses_count": 24
+  },
+  {
+   "number": 60,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 91,
+   "revealed_after": 33,
+   "verses_count": 13
+  },
+  {
+   "number": 61,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 109,
+   "revealed_after": 64,
+   "verses_count": 14
+  },
+  {
+   "number": 62,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 110,
+   "revealed_after": 61,
+   "verses_count": 11
+  },
+  {
+   "number": 63,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 104,
+   "revealed_after": 22,
+   "verses_count": 11
+  },
+  {
+   "number": 64,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 108,
+   "revealed_after": 66,
+   "verses_count": 18
+  },
+  {
+   "number": 65,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 99,
+   "revealed_after": 76,
+   "verses_count": 12
+  },
+  {
+   "number": 66,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 107,
+   "revealed_after": 49,
+   "verses_count": 12
+  },
+  {
+   "number": 67,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 77,
+   "revealed_after": 52,
+   "verses_count": 30
+  },
+  {
+   "number": 68,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29,
+      30,
+      31,
+      32,
+      33,
+      48,
+      49,
+      50
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 2,
+   "revealed_after": 96,
+   "verses_count": 52
+  },
+  {
+   "number": 69,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 78,
+   "revealed_after": 67,
+   "verses_count": 52
+  },
+  {
+   "number": 70,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 79,
+   "revealed_after": 69,
+   "verses_count": 44
+  },
+  {
+   "number": 71,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 71,
+   "revealed_after": 16,
+   "verses_count": 28
+  },
+  {
+   "number": 72,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 40,
+   "revealed_after": 7,
+   "verses_count": 28
+  },
+  {
+   "number": 73,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      10,
+      11,
+      20
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 3,
+   "revealed_after": 68,
+   "verses_count": 20
+  },
+  {
+   "number": 74,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 4,
+   "revealed_after": 73,
+   "verses_count": 56
+  },
+  {
+   "number": 75,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 31,
+   "revealed_after": 101,
+   "verses_count": 40
+  },
+  {
+   "number": 76,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 98,
+   "revealed_after": 55,
+   "verses_count": 31
+  },
+  {
+   "number": 77,
+   "type": "مكية",
+   "exceptions": [
+    {
+     "verses": [
+      48
+     ],
+     "kind": "مدنية"
+    }
+   ],
+   "note": "",
+   "revelation_order": 33,
+   "revealed_after": 104,
+   "verses_count": 50
+  },
+  {
+   "number": 78,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 80,
+   "revealed_after": 70,
+   "verses_count": 40
+  },
+  {
+   "number": 79,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 81,
+   "revealed_after": 78,
+   "verses_count": 46
+  },
+  {
+   "number": 80,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 24,
+   "revealed_after": 53,
+   "verses_count": 42
+  },
+  {
+   "number": 81,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 7,
+   "revealed_after": 111,
+   "verses_count": 29
+  },
+  {
+   "number": 82,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 82,
+   "revealed_after": 79,
+   "verses_count": 19
+  },
+  {
+   "number": 83,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "وهي آخر سورة نزلت بمكة",
+   "revelation_order": 86,
+   "revealed_after": 29,
+   "verses_count": 36
+  },
+  {
+   "number": 84,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 83,
+   "revealed_after": 82,
+   "verses_count": 25
+  },
+  {
+   "number": 85,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 27,
+   "revealed_after": 91,
+   "verses_count": 22
+  },
+  {
+   "number": 86,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 36,
+   "revealed_after": 90,
+   "verses_count": 17
+  },
+  {
+   "number": 87,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 8,
+   "revealed_after": 81,
+   "verses_count": 19
+  },
+  {
+   "number": 88,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 68,
+   "revealed_after": 51,
+   "verses_count": 26
+  },
+  {
+   "number": 89,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 10,
+   "revealed_after": 92,
+   "verses_count": 30
+  },
+  {
+   "number": 90,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 35,
+   "revealed_after": 50,
+   "verses_count": 20
+  },
+  {
+   "number": 91,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 26,
+   "revealed_after": 97,
+   "verses_count": 15
+  },
+  {
+   "number": 92,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 9,
+   "revealed_after": 87,
+   "verses_count": 21
+  },
+  {
+   "number": 93,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 11,
+   "revealed_after": 89,
+   "verses_count": 11
+  },
+  {
+   "number": 94,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 12,
+   "revealed_after": 93,
+   "verses_count": 8
+  },
+  {
+   "number": 95,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 28,
+   "revealed_after": 85,
+   "verses_count": 8
+  },
+  {
+   "number": 96,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 1,
+   "revealed_after": null,
+   "verses_count": 19
+  },
+  {
+   "number": 97,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 25,
+   "revealed_after": 80,
+   "verses_count": 5
+  },
+  {
+   "number": 98,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 100,
+   "revealed_after": 65,
+   "verses_count": 8
+  },
+  {
+   "number": 99,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 93,
+   "revealed_after": 4,
+   "verses_count": 8
+  },
+  {
+   "number": 100,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 14,
+   "revealed_after": 103,
+   "verses_count": 11
+  },
+  {
+   "number": 101,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 30,
+   "revealed_after": 106,
+   "verses_count": 11
+  },
+  {
+   "number": 102,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 16,
+   "revealed_after": 108,
+   "verses_count": 8
+  },
+  {
+   "number": 103,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 13,
+   "revealed_after": 94,
+   "verses_count": 3
+  },
+  {
+   "number": 104,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 32,
+   "revealed_after": 75,
+   "verses_count": 9
+  },
+  {
+   "number": 105,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 19,
+   "revealed_after": 109,
+   "verses_count": 5
+  },
+  {
+   "number": 106,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 29,
+   "revealed_after": 95,
+   "verses_count": 4
+  },
+  {
+   "number": 107,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 17,
+   "revealed_after": 102,
+   "verses_count": 7
+  },
+  {
+   "number": 108,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 15,
+   "revealed_after": 100,
+   "verses_count": 3
+  },
+  {
+   "number": 109,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 18,
+   "revealed_after": 107,
+   "verses_count": 6
+  },
+  {
+   "number": 110,
+   "type": "مدنية",
+   "exceptions": [],
+   "note": "وقد نزلت بمنى في حجة الوداع",
+   "revelation_order": 114,
+   "revealed_after": 9,
+   "verses_count": 3
+  },
+  {
+   "number": 111,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 6,
+   "revealed_after": 1,
+   "verses_count": 5
+  },
+  {
+   "number": 112,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 22,
+   "revealed_after": 114,
+   "verses_count": 4
+  },
+  {
+   "number": 113,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 20,
+   "revealed_after": 105,
+   "verses_count": 5
+  },
+  {
+   "number": 114,
+   "type": "مكية",
+   "exceptions": [],
+   "note": "",
+   "revelation_order": 21,
+   "revealed_after": 113,
+   "verses_count": 6
+  }
+ ]
+}

@@ -1,0 +1,149 @@
+#pragma once
+// -*- coding: utf-8 -*-
+// database.hpp — محرك قاعدة البيانات القرآنية بلغة C++ (SQLite3) على طبعة المدينة المنورة (٦٠٤ صفحات).
+
+#include "utf8_util.hpp"
+#include "../third_party/sqlite3/sqlite3.h"
+
+#include <map>
+#include <set>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace mushaf {
+
+struct SurahInfo {
+    int number = 1;
+    std::wstring name_arabic;
+    std::wstring name_uthmani;
+    std::wstring name_simple;
+    std::wstring revelation_place;
+    int revelation_order = 1;
+    bool bismillah_pre = true;
+    int verses_count = 7;
+    int start_page = 1;
+    int end_page = 1;
+    int start_juz = 1;
+};
+
+struct AyahInfo {
+    int id = 1;
+    int surah_number = 1;
+    std::wstring surah_name;
+    std::wstring surah_name_uthmani;
+    std::wstring surah_name_simple;
+    int ayah_number = 1;
+    std::wstring verse_key;
+    std::wstring text_qpc_hafs;
+    std::wstring text_qpc_clean;
+    std::wstring text_uthmani;
+    std::wstring text_imlaei;
+    std::wstring text_simple;
+    int page_number = 1;
+    int juz_number = 1;
+    int hizb_number = 1;
+    int rub_el_hizb_number = 1;
+    int manzil_number = 1;
+    int ruku_number = 1;
+    int sajdah_number = 0; // 0 = لا يوجد
+};
+
+struct DivisionRangeInfo {
+    int unit_number = 1;
+    int hizb_number = 1;
+    int juz_number = 1;
+    int start_page = 1;
+    int end_page = 1;
+    int start_surah_number = 1;
+    std::wstring start_surah_name;
+    std::wstring start_surah_simple;
+    int start_ayah_number = 1;
+    int end_surah_number = 1;
+    std::wstring end_surah_name;
+    std::wstring end_surah_simple;
+    int end_ayah_number = 1;
+    int verses_count = 1;
+    int surahs_count = 1;
+    std::wstring first_words;
+};
+
+struct SurahHeadingInfo {
+    std::wstring type;
+    std::wstring excepted_verses;
+    std::wstring place_note;
+    int after_surah = 0;
+};
+
+class QuranDatabase {
+public:
+    QuranDatabase(
+        const std::wstring& db_path,
+        const std::wstring& headings_path
+    );
+    ~QuranDatabase();
+
+    bool is_open() const { return db_ != nullptr; }
+    int page_count() const;
+    int total_ayahs() const { return max_id_; }
+
+    int page_of_id(int ayah_id) const;
+    std::pair<int, int> page_id_bounds(int page) const;
+
+    const std::vector<SurahInfo>& get_all_surahs() const { return surahs_cache_; }
+    SurahInfo get_surah(int surah_number) const;
+    SurahHeadingInfo get_surah_heading_info(int surah_number) const;
+
+    std::vector<AyahInfo> get_surah_ayahs(int surah_number) const;
+    std::vector<AyahInfo> get_page_ayahs(int page_number) const;
+    std::vector<AyahInfo> get_juz_ayahs(int juz_number) const;
+    std::vector<AyahInfo> get_hizb_ayahs(int hizb_number) const;
+    std::vector<AyahInfo> get_rub_ayahs(int rub_number) const;
+    std::vector<AyahInfo> get_manzil_ayahs(int manzil_number) const;
+    std::vector<AyahInfo> get_ruku_ayahs(int ruku_number) const;
+
+    bool get_ayah(int surah_number, int ayah_number, AyahInfo& out) const;
+    bool get_ayah_by_key(const std::wstring& verse_key, AyahInfo& out) const;
+    bool get_ayah_by_id(int id, AyahInfo& out) const;
+    std::vector<std::wstring> find_same_text(const std::wstring& text_simple) const;
+
+    const std::vector<DivisionRangeInfo>& get_page_info_list() const;
+    const std::vector<DivisionRangeInfo>& get_juz_info_list() const;
+    const std::vector<DivisionRangeInfo>& get_hizb_info_list() const;
+    const std::vector<DivisionRangeInfo>& get_rub_info_list() const;
+    const std::vector<DivisionRangeInfo>& get_manzil_info_list() const;
+    const std::vector<DivisionRangeInfo>& get_ruku_info_list() const;
+
+    std::vector<AyahInfo> search_ayahs(const std::wstring& query, int surah_filter = 0, int limit = 250) const;
+    const std::set<int>& rub_start_ids() const { return rub_start_ids_; }
+
+private:
+    sqlite3* db_ = nullptr;
+    std::wstring edition_ = L"madinah";
+    int max_id_ = 6236;
+
+    std::vector<SurahInfo> base_surahs_;
+    std::vector<SurahInfo> surahs_cache_;
+    std::map<int, SurahInfo> surah_map_;
+    std::map<int, std::pair<int, int>> surah_id_bounds_;
+    std::map<std::pair<int, int>, int> key_to_id_;
+    std::map<int, std::pair<int, int>> id_to_key_;
+    std::map<std::wstring, std::vector<int>> page_first_ids_;
+    std::set<int> rub_start_ids_;
+    std::map<int, SurahHeadingInfo> headings_map_;
+
+    mutable std::map<std::wstring, std::vector<DivisionRangeInfo>> page_info_cache_;
+    mutable std::map<std::wstring, std::vector<DivisionRangeInfo>> juz_info_cache_;
+    mutable std::map<std::wstring, std::vector<DivisionRangeInfo>> hizb_info_cache_;
+    mutable std::map<std::wstring, std::vector<DivisionRangeInfo>> rub_info_cache_;
+    mutable std::map<std::wstring, std::vector<DivisionRangeInfo>> manzil_info_cache_;
+    mutable std::map<std::wstring, std::vector<DivisionRangeInfo>> ruku_info_cache_;
+
+    void load_surahs();
+    void apply_page_mapping();
+    void load_headings(const std::wstring& path);
+    AyahInfo row_to_ayah(sqlite3_stmt* stmt) const;
+    std::vector<DivisionRangeInfo> build_division_list(const char* col_name, int expected_max) const;
+};
+
+} // namespace mushaf

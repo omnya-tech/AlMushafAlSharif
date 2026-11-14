@@ -1,0 +1,345 @@
+#pragma once
+// -*- coding: utf-8 -*-
+// sajdah_and_formatter.hpp — مواضع السجدات عند الأئمة الأربعة وتنسيق الآيات والنطق الصوتي لقارئات الشاشة.
+
+#include "database.hpp"
+
+#include <map>
+#include <string>
+#include <vector>
+
+namespace mushaf {
+
+struct SajdahPlace {
+    std::wstring verse_key;
+    int surah = 0;
+    int ayah = 0;
+    bool hanafi = false;
+    bool maliki = false;
+    bool shafii = false;
+    bool hanbali = false;
+    std::wstring note_ar;
+    std::wstring note_en;
+
+    bool is_agreed() const {
+        return hanafi && maliki && shafii && hanbali;
+    }
+};
+
+inline const std::vector<SajdahPlace>& all_sajdah_places() {
+    static const std::vector<SajdahPlace> places = {
+        {L"7:206",  7, 206, true,  true,  true,  true,  L"متفق عليها بين الأئمة الأربعة (خاتمة سورة الأعراف)", L"Agreed upon by the four imams (end of Al-A'raf)"},
+        {L"13:15", 13,  15, true,  true,  true,  true,  L"متفق عليها بين الأئمة الأربعة", L"Agreed upon by the four imams"},
+        {L"16:50", 16,  50, true,  true,  true,  true,  L"متفق عليها بين الأئمة الأربعة (وموضع السجود آخر الآية ٥٠)", L"Agreed upon by the four imams (prostration is at the end of ayah 50)"},
+        {L"17:109",17, 109, true,  true,  true,  true,  L"متفق عليها بين الأئمة الأربعة", L"Agreed upon by the four imams"},
+        {L"19:58", 19,  58, true,  true,  true,  true,  L"متفق عليها بين الأئمة الأربعة", L"Agreed upon by the four imams"},
+        {L"22:18", 22,  18, true,  true,  true,  true,  L"السجدة الأولى من سورة الحج، متفق عليها بين الأئمة الأربعة", L"First prostration in Al-Hajj, agreed upon by the four imams"},
+        {L"22:77", 22,  77, false, false, true,  true,  L"السجدة الثانية من سورة الحج: عزيمة عند الشافعي وأحمد، وليست سجدة تلاوة عند أبي حنيفة ومالك", L"Second prostration in Al-Hajj: observed by Ash-Shafi'i and Ahmad, not by Abu Hanifah and Malik"},
+        {L"25:60", 25,  60, true,  true,  true,  true,  L"متفق عليها بين الأئمة الأربعة", L"Agreed upon by the four imams"},
+        {L"27:26", 27,  26, true,  true,  true,  true,  L"متفق عليها بين الأئمة الأربعة", L"Agreed upon by the four imams"},
+        {L"32:15", 32,  15, true,  true,  true,  true,  L"متفق عليها بين الأئمة الأربعة", L"Agreed upon by the four imams"},
+        {L"38:24", 38,  24, true,  true,  false, false, L"سورة ص: سجدة تلاوة عند أبي حنيفة ومالك، وسجدة شكر لا تلاوة عند الشافعي وأحمد", L"Surah Sad: prostration of recitation for Abu Hanifah and Malik; prostration of gratitude for Ash-Shafi'i and Ahmad"},
+        {L"41:38", 41,  38, true,  true,  true,  true,  L"متفق على أصل السجدة؛ وعند مالك الموضع آخر الآية ٣٧، وعند الجمهور آخر الآية ٣٨", L"Agreed upon; Malik places it at the end of ayah 37, and the majority at the end of ayah 38"},
+        {L"53:62", 53,  62, true,  false, true,  true,  L"من مفصّل السور: سجدة عند أبي حنيفة والشافعي وأحمد، ولا سجود في المفصّل عند مالك على المشهور", L"In the Mufassal: observed by Abu Hanifah, Ash-Shafi'i and Ahmad; not by Malik"},
+        {L"84:21", 84,  21, true,  false, true,  true,  L"من مفصّل السور: سجدة عند أبي حنيفة والشافعي وأحمد، ولا سجود فيها عند مالك", L"In the Mufassal: observed by Abu Hanifah, Ash-Shafi'i and Ahmad; not by Malik"},
+        {L"96:19", 96,  19, true,  false, true,  true,  L"من مفصّل السور: سجدة عند أبي حنيفة والشافعي وأحمد، ولا سجود فيها عند مالك", L"In the Mufassal: observed by Abu Hanifah, Ash-Shafi'i and Ahmad; not by Malik"},
+    };
+    return places;
+}
+
+inline const SajdahPlace* find_sajdah_place(const std::wstring& verse_key) {
+    if (verse_key == L"41:37") {
+        for (const auto& p : all_sajdah_places()) {
+            if (p.verse_key == L"41:38") return &p;
+        }
+    }
+    for (const auto& p : all_sajdah_places()) {
+        if (p.verse_key == verse_key) return &p;
+    }
+    return nullptr;
+}
+
+inline std::wstring sajdah_short_label(const std::wstring& verse_key, bool en = false) {
+    if (verse_key == L"41:37") {
+        return en ? L"prostration (Maliki school)" : L"موضع سجدة تلاوة عند المالكية";
+    }
+    const SajdahPlace* p = find_sajdah_place(verse_key);
+    if (!p) return L"";
+    if (verse_key == L"41:38") {
+        return en ? L"prostration (Hanafi, Shafi'i and Hanbali; for Malik at ayah 37)"
+                  : L"سجدة عند الحنفية والشافعية والحنابلة (وعند المالكية عند الآية ٣٧)";
+    }
+    if (p->is_agreed()) {
+        return en ? L"prostration (agreed upon by the four schools)"
+                  : L"سجدة تلاوة (متفق عليها عند الأئمة الأربعة)";
+    }
+    std::vector<std::wstring> names;
+    if (p->hanafi)  names.push_back(en ? L"Hanafi"  : L"الحنفية");
+    if (p->maliki)  names.push_back(en ? L"Maliki"  : L"المالكية");
+    if (p->shafii)  names.push_back(en ? L"Shafi'i" : L"الشافعية");
+    if (p->hanbali) names.push_back(en ? L"Hanbali" : L"الحنابلة");
+    if (en) {
+        std::wstring joined;
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (i > 0) joined += (i + 1 == names.size()) ? L" and " : L", ";
+            joined += names[i];
+        }
+        return L"prostration (" + joined + L")";
+    } else {
+        std::wstring joined;
+        for (size_t i = 0; i < names.size(); ++i) {
+            if (i > 0) joined += L" و";
+            joined += names[i];
+        }
+        return L"سجدة عند " + joined;
+    }
+}
+
+inline std::wstring clean_muqattaat_word(const std::wstring& w) {
+    std::wstring out;
+    for (wchar_t c : w) {
+        if ((c >= 0x064B && c <= 0x065F) || c == 0x0670 || c == 0x0640 ||
+            c == L'،' || c == L'.' || c == L'؟' || c == L'!') {
+            continue;
+        }
+        out.push_back(c);
+    }
+    return out;
+}
+
+inline std::wstring prepare_ayah_for_screen_reader(
+    const AyahInfo& ayah,
+    bool phonetic_norm = true,
+    bool spell_muqattaat = false
+) {
+    if (!phonetic_norm) return ayah.text_uthmani;
+
+    static const std::map<std::wstring, std::wstring> muqattaat = {
+        {L"الم", L"أَلِفْ لَامْ مِيمْ"},
+        {L"المص", L"أَلِفْ لَامْ مِيمْ صَادْ"},
+        {L"الر", L"أَلِفْ لَامْ رَا"},
+        {L"المر", L"أَلِفْ لَامْ مِيمْ رَا"},
+        {L"كهيعص", L"كَافْ هَا يَا عَيْنْ صَادْ"},
+        {L"طه", L"طَا هَا"},
+        {L"طسم", L"طَا سِينْ مِيمْ"},
+        {L"طس", L"طَا سِينْ"},
+        {L"يس", L"يَا سِينْ"},
+        {L"ص", L"صَادْ"},
+        {L"حم", L"حَا مِيمْ"},
+        {L"عسق", L"عَيْنْ سِينْ قَافْ"},
+        {L"ق", L"قَافْ"},
+        {L"ن", L"نُونْ"},
+    };
+
+    std::wstring text = ayah.text_imlaei;
+    for (wchar_t& c : text) {
+        if ((c >= 0x06D6 && c <= 0x06ED) || c == 0x06DD || c == 0x06DE) c = L' ';
+    }
+    replace_all(text, L"الرَّحْمَٰنِ", L"الرَّحْمَنِ");
+    replace_all(text, L"الْعَٰلَمِينَ", L"الْعَالَمِينَ");
+    replace_all(text, L"ذَٰلِكَ", L"ذَلِكَ");
+    replace_all(text, L"هَٰذَا", L"هَذَا");
+    replace_all(text, L"هَٰذِهِ", L"هَذِهِ");
+    replace_all(text, L"هَٰؤُلَاءِ", L"هَؤُلَاءِ");
+    replace_all(text, L"لَٰكِن", L"لَكِن");
+    replace_all(text, L"إِلَٰه", L"إِلَه");
+    replace_all(text, L"\x0670", L"");
+
+    auto words = split_words(text);
+    if (spell_muqattaat && (ayah.ayah_number == 1 || ayah.ayah_number == 2)) {
+        for (auto& w : words) {
+            std::wstring cw = clean_muqattaat_word(w);
+            auto it = muqattaat.find(cw);
+            if (it != muqattaat.end()) w = it->second;
+        }
+    }
+    return join_words(words, L" ");
+}
+
+inline std::wstring division_badge_text(const AyahInfo& ayah, bool en = false) {
+    int rub = ayah.rub_el_hizb_number;
+    if (rub < 2) return L"";
+    int hizb = ayah.hizb_number;
+    int juz = ayah.juz_number;
+    int pos = (rub - 1) % 4;
+    if ((rub - 1) % 8 == 0) {
+        if (!en) return L"[۞ الجزء " + to_arabic_digits(juz) + L" • الحزب " + to_arabic_digits(hizb) + L"]";
+        return L"[۞ Juz " + std::to_wstring(juz) + L" • Hizb " + std::to_wstring(hizb) + L"]";
+    }
+    if (pos == 0) {
+        if (!en) return L"[۞ الحزب " + to_arabic_digits(hizb) + L" • الجزء " + to_arabic_digits(juz) + L"]";
+        return L"[۞ Hizb " + std::to_wstring(hizb) + L" • Juz " + std::to_wstring(juz) + L"]";
+    }
+    if (pos == 1) {
+        if (!en) return L"[۞ ربع الحزب " + to_arabic_digits(hizb) + L"]";
+        return L"[۞ Quarter of hizb " + std::to_wstring(hizb) + L"]";
+    }
+    if (pos == 2) {
+        if (!en) return L"[۞ نصف الحزب " + to_arabic_digits(hizb) + L"]";
+        return L"[۞ Half of hizb " + std::to_wstring(hizb) + L"]";
+    }
+    if (!en) return L"[۞ ثلاثة أرباع الحزب " + to_arabic_digits(hizb) + L"]";
+    return L"[۞ Three-quarters of hizb " + std::to_wstring(hizb) + L"]";
+}
+
+inline std::wstring division_spoken_text(const AyahInfo& ayah, bool en = false) {
+    int rub = ayah.rub_el_hizb_number;
+    if (rub < 2) return L"";
+    int hizb = ayah.hizb_number;
+    int juz = ayah.juz_number;
+    int pos = (rub - 1) % 4;
+    if ((rub - 1) % 8 == 0) {
+        return en ? (L"start of juz " + std::to_wstring(juz) + L", hizb " + std::to_wstring(hizb))
+                  : (L"بداية الجزء " + std::to_wstring(juz) + L"، الحزب " + std::to_wstring(hizb));
+    }
+    if (pos == 0) {
+        return en ? (L"start of hizb " + std::to_wstring(hizb) + L", juz " + std::to_wstring(juz))
+                  : (L"بداية الحزب " + std::to_wstring(hizb) + L" من الجزء " + std::to_wstring(juz));
+    }
+    if (pos == 1) {
+        return en ? (L"quarter of hizb " + std::to_wstring(hizb)) : (L"ربع الحزب " + std::to_wstring(hizb));
+    }
+    if (pos == 2) {
+        return en ? (L"half of hizb " + std::to_wstring(hizb)) : (L"نصف الحزب " + std::to_wstring(hizb));
+    }
+    return en ? (L"three-quarters of hizb " + std::to_wstring(hizb)) : (L"ثلاثة أرباع الحزب " + std::to_wstring(hizb));
+}
+
+inline std::wstring build_ayah_accessible_name(
+    const AyahInfo& ayah,
+    bool phonetic_norm,
+    bool spell_muqattaat,
+    const std::wstring& display_mode,
+    bool is_rub_start,
+    const std::wstring& bookmark_spoken,
+    bool en = false,
+    int letter_count = 0
+) {
+    std::wstring spoken = prepare_ayah_for_screen_reader(ayah, phonetic_norm, spell_muqattaat);
+    std::wstring tail;
+    if (display_mode == L"text") {
+        tail = L"";
+    } else if (display_mode == L"text_number") {
+        tail = en ? (L"Ayah " + std::to_wstring(ayah.ayah_number))
+                  : (L"الآية " + std::to_wstring(ayah.ayah_number));
+    } else {
+        tail = en ? (L"Ayah " + std::to_wstring(ayah.ayah_number) + L" of Surah " + ayah.surah_name)
+                  : (L"الآية " + std::to_wstring(ayah.ayah_number) + L" من سورة " + ayah.surah_name);
+    }
+
+    std::wstring sajdah = sajdah_short_label(ayah.verse_key, en);
+    std::wstring div = is_rub_start ? division_spoken_text(ayah, en) : L"";
+    std::wstring letters_txt;
+    if (letter_count > 0) {
+        letters_txt = en ? (std::to_wstring(letter_count) + L" letters")
+                         : (std::to_wstring(letter_count) + L" حرفاً");
+    }
+    std::wstring sep = en ? L", " : L"، ";
+
+    for (const auto& extra : {letters_txt, sajdah, div, bookmark_spoken}) {
+        if (!extra.empty()) {
+            tail = tail.empty() ? extra : (tail + sep + extra);
+        }
+    }
+    return tail.empty() ? spoken : (spoken + L" — " + tail);
+}
+
+inline std::wstring format_ayah_custom(
+    const AyahInfo& ayah,
+    const std::wstring& script = L"uthmani",
+    bool brackets = true,
+    bool reference = true,
+    bool arabic_digits = true
+) {
+    std::wstring core;
+    if (script == L"qpc") core = ayah.text_qpc_clean;
+    else if (script == L"imlaei") core = ayah.text_imlaei;
+    else if (script == L"plain") core = ayah.text_simple;
+    else core = ayah.text_uthmani;
+
+    replace_all(core, L"۞", L"");
+    core = join_words(split_words(core), L" ");
+
+    std::wstring body = brackets ? (L"﴿ " + core + L" ﴾") : core;
+    if (reference) {
+        std::wstring n_str = arabic_digits ? to_arabic_digits(ayah.ayah_number) : std::to_wstring(ayah.ayah_number);
+        return body + L" [" + ayah.surah_name + L": " + n_str + L"]";
+    }
+    return body;
+}
+
+inline std::wstring quarter_label(int rub_number, int hizb_number, bool en = false) {
+    int pos = (rub_number - 1) % 4;
+    if (en) {
+        if (pos == 0) return L"Start of hizb " + std::to_wstring(hizb_number);
+        if (pos == 1) return L"Quarter of hizb " + std::to_wstring(hizb_number);
+        if (pos == 2) return L"Half of hizb " + std::to_wstring(hizb_number);
+        return L"Three-quarters of hizb " + std::to_wstring(hizb_number);
+    } else {
+        std::wstring h = to_arabic_digits(hizb_number);
+        if (pos == 0) return L"أول الحزب " + h;
+        if (pos == 1) return L"ربع الحزب " + h;
+        if (pos == 2) return L"نصف الحزب " + h;
+        return L"ثلاثة أرباع الحزب " + h;
+    }
+}
+
+inline std::wstring manzil_day_label(int manzil_number, bool en = false) {
+    static const wchar_t* ar[7] = {
+        L"اليوم الأول (من الفاتحة إلى النساء)",
+        L"اليوم الثاني (من المائدة إلى التوبة)",
+        L"اليوم الثالث (من يونس إلى النحل)",
+        L"اليوم الرابع (من الإسراء إلى الفرقان)",
+        L"اليوم الخامس (من الشعراء إلى يس)",
+        L"اليوم السادس (من الصافات إلى الحجرات)",
+        L"اليوم السابع — حزب المفصّل (من ق إلى الناس)",
+    };
+    static const wchar_t* en_lbl[7] = {
+        L"Day 1 (Al-Fatihah to An-Nisa)",
+        L"Day 2 (Al-Ma'idah to At-Tawbah)",
+        L"Day 3 (Yunus to An-Nahl)",
+        L"Day 4 (Al-Isra to Al-Furqan)",
+        L"Day 5 (Ash-Shu'ara to Ya-Sin)",
+        L"Day 6 (As-Saffat to Al-Hujurat)",
+        L"Day 7 — Al-Mufassal (Qaf to An-Nas)",
+    };
+    int idx = std::max(1, std::min(7, manzil_number)) - 1;
+    return en ? en_lbl[idx] : ar[idx];
+}
+
+inline std::wstring build_surah_heading(const QuranDatabase& db, int surah_number, bool en = false) {
+    SurahInfo s = db.get_surah(surah_number);
+    SurahHeadingInfo h = db.get_surah_heading_info(surah_number);
+    if (h.type.empty()) h.type = s.revelation_place;
+
+    if (en) {
+        std::wstring place = (h.type == L"مكية") ? L"Meccan" : L"Medinan";
+        std::wstring res = place;
+        if (!h.excepted_verses.empty()) {
+            res += L", except ayah " + to_western_digits(h.excepted_verses);
+        }
+        res += L" • " + std::to_wstring(s.verses_count) + L" verses";
+        if (h.after_surah > 0) {
+            SurahInfo prev = db.get_surah(h.after_surah);
+            res += L" • revealed after Surah " + prev.name_arabic;
+        }
+        return res;
+    } else {
+        std::wstring res = h.type;
+        if (!h.excepted_verses.empty()) {
+            bool multi = (h.excepted_verses.find(L'،') != std::wstring::npos || h.excepted_verses.find(L'-') != std::wstring::npos);
+            res += (multi ? L"، إلا الآيات " : L"، إلا الآية ") + to_arabic_digits(h.excepted_verses);
+        }
+        if (!h.place_note.empty()) {
+            res += L" (" + to_arabic_digits(h.place_note) + L")";
+        }
+        res += L"، وآياتها " + to_arabic_digits(s.verses_count);
+        if (h.after_surah > 0) {
+            SurahInfo prev = db.get_surah(h.after_surah);
+            res += L"، نزلت بعد سورة " + prev.name_arabic;
+        }
+        return res;
+    }
+}
+
+} // namespace mushaf

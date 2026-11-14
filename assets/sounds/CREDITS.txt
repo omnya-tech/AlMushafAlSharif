@@ -1,0 +1,10 @@
+﻿page_turn.wav
+-------------
+تسجيل حقيقي لتقليب ورقة كتاب: "book_flip.5" من مجموعة "10 Book Page Flips" للمستخدم starninjas على OpenGameArt.
+الرابط: https://opengameart.org/content/10-book-page-flips
+الرخصة: CC0 1.0 (ملكية عامة) — يجوز استخدامه وتعديله وتوزيعه تجارياً بلا شرط نسبة.
+https://creativecommons.org/publicdomain/zero/1.0/
+
+التعديل: قص الصمت، وإزالة الأزيز تحت 140 هرتز، وتلاشٍ ناعم في البداية والنهاية، وضبط مستوى الصوت.
+
+ملاحظة: scripts/make_page_turn_sound.py يولّد صوتاً بديلاً مُركّباً بالحساب، وتشغيله يستبدل هذا الملف.

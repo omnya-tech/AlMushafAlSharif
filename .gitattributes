@@ -1,0 +1,10 @@
+# ملفات الدُّفعات تحتاج نهايات أسطر ويندوز لتعمل
+*.bat text eol=crlf
+*.iss text eol=crlf
+
+# ملفات ثنائية لا تُعدَّل نهايات أسطرها
+*.sqlite3 binary
+*.ttf binary
+*.wav binary
+*.ico binary
+*.dll binary
