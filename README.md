@@ -49,3 +49,14 @@ bin\AlMushafAlSharif-x64.exe --self-test
 | `installer.iss` | ملف تثبيت Inno Setup |
 
 تُحفظ إعدادات المستخدم في `%APPDATA%\AlMushafAlSharif\settings.json`.
+
+## الخطوط والرخص
+
+| الخط | الرخصة |
+|---|---|
+| خط حفص العثماني — مجمع الملك فهد (`UthmanicHafs1Ver18.ttf`) | اتفاقية مجمع الملك فهد: الاستخدام والنسخ والتوزيع مجاناً، ويُمنع بيعه أو تعديله ([`LICENSE-KFGQPC.txt`](assets/fonts/LICENSE-KFGQPC.txt)) |
+| أميري وأميري قرآن | SIL Open Font License 1.1 ([`OFL-Amiri.txt`](assets/fonts/OFL-Amiri.txt)) |
+| شهرزاد الجديد | SIL Open Font License 1.1 ([`OFL-ScheherazadeNew.txt`](assets/fonts/OFL-ScheherazadeNew.txt)) |
+
+تُوزَّع الخطوط كما هي دون أي تعديل، ونص كل رخصة مرفق معها في `assets/fonts/`.
+صوت تقليب الصفحة من OpenGameArt برخصة CC0 (التفاصيل في `assets/sounds/CREDITS.txt`).
