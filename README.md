@@ -50,6 +50,14 @@ bin\AlMushafAlSharif-x64.exe --self-test
 
 تُحفظ إعدادات المستخدم في `%APPDATA%\AlMushafAlSharif\settings.json`.
 
+## الترخيص
+
+البرنامج مجاني، يجوز استخدامه ونسخه وتوزيعه كاملاً دون تغيير، ولا يجوز بيعه ولا تعديل نص القرآن فيه.
+النص الكامل بالعربية والإنجليزية في [`LICENSE`](LICENSE)، ويعرضه ملف التثبيت بلغة التثبيت قبل المتابعة
+(النسختان في `legal/`).
+
+Free to use, copy and distribute unchanged; not for sale. Full terms in Arabic and English in [`LICENSE`](LICENSE).
+
 ## الخطوط والرخص
 
 | الخط | الرخصة |

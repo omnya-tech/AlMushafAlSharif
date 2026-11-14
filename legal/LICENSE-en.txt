@@ -1,0 +1,22 @@
+﻿Al-Mushaf Al-Sharif — License Agreement, Version 1.0
+Copyright © 2026 Omnya Technology. All rights reserved.
+
+Omnya Technology offers this program as a gift, seeking only the pleasure of Allah, to researchers, graduate students and all Muslims. By installing or using the program you agree to the following terms:
+
+1. Use: Anyone may use the program free of charge, for personal, educational, research and da'wah purposes, on any number of computers.
+
+2. Copying and distribution: The program may be copied and distributed free of charge, provided it is distributed complete and unchanged, together with this agreement and the licenses of its bundled components.
+
+3. No sale: The program may not be sold, rented or offered for any fee, nor included in any product or service that is sold.
+
+4. Integrity of the Quran text: The text of the Noble Quran and its data inside the program may not be modified, and no modified copy of them may be distributed.
+
+5. Source code: The source code may be viewed, studied and modified for personal use or to suggest improvements to the team. A modified version of the program may not be distributed without written permission from Omnya Technology.
+
+6. Bundled components: The following components are subject to their own licenses, whose texts ship with the program:
+   - KFGQPC HAFS Uthmanic Script font: the King Fahd Glorious Quran Printing Complex agreement; it may not be sold or modified (assets\fonts\LICENSE-KFGQPC.txt).
+   - Amiri, Amiri Quran and Scheherazade New fonts: SIL Open Font License, Version 1.1 (assets\fonts).
+   - SQLite library: public domain.
+   - Page-turn sound: public domain under CC0 (assets\sounds\CREDITS.txt).
+
+7. Disclaimer: The program is provided "as is", without any express or implied warranty. Every effort has been made to review the Quran text and its data; if you find an error, please report it to the team so it can be corrected. The team accepts no liability for any damage arising from the use of, or inability to use, the program.

@@ -46,8 +46,9 @@ ShowLanguageDialog=yes
 LanguageDetectionMethod=uilanguage
 
 [Languages]
-Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"
-Name: "english"; MessagesFile: "compiler:Default.isl"
+; صفحة اتفاقية الترخيص تظهر بلغة التثبيت المختارة، ولا يكمل التثبيت إلا بالموافقة عليها
+Name: "arabic"; MessagesFile: "compiler:Languages\Arabic.isl"; LicenseFile: "legal\LICENSE-ar.txt"
+Name: "english"; MessagesFile: "compiler:Default.isl"; LicenseFile: "legal\LICENSE-en.txt"
 
 [CustomMessages]
 arabic.AppName={#AppNameAr}
@@ -66,6 +67,10 @@ Source: "bin\AlMushafAlSharif-win7-x86.exe"; DestDir: "{app}"; DestName: "{#AppE
 Source: "bin\nvdaControllerClient32.dll"; DestDir: "{app}"; Check: not Is64BitInstallMode; Flags: ignoreversion
 
 Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+; نص الاتفاقية بالعربية والإنجليزية يبقى مع البرنامج المثبَّت
+Source: "legal\LICENSE-ar.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "legal\LICENSE-en.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{cm:AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\assets\icon.ico"; Comment: "{cm:AppComment}"
