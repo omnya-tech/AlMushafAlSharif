@@ -85,6 +85,7 @@ enum MenuIds : UINT {
     IDM_SET_KHATMAH      = 1111,
     IDM_JUMP_KHATMAH     = 1112,
     IDM_BOOKMARKS_DLG    = 1113,
+    IDM_CLEAR_MARKS      = 1114,
 
     // 3) قائمة الخيارات والعرض
     IDM_OPTIONS          = 1200,
@@ -189,6 +190,13 @@ public:
     RECT arrow_rect_prev{};        // سهم «السابق» (على اليمين المرئي)
     int arrow_hover = 0;           // +1 فوق التالي، -1 فوق السابق، 0 لا شيء
     bool tracking_mouse = false;
+
+    // تظليل الآيات بالفأرة للمبصر: يتراكم مع كل سحب جديد، ويُنسخ كله بأمر «نسخ»
+    std::set<int> marked_ids;      // أرقام الآيات المظللة (ترتيبها العام في المصحف)
+    bool mark_dragging = false;
+    int mark_drag_start = -1;      // صف بداية السحب
+    int mark_drag_end = -1;        // الصف الذي وصل إليه السحب
+    POINT mark_drag_origin{};
     HICON app_icon = nullptr;
     HACCEL haccel = nullptr;
 
@@ -1090,6 +1098,10 @@ public:
                 : (L"سورة " + s_name + L"  •  الآية " + num_str(a.ayah_number) +
                    L"  •  الصفحة " + num_str(a.page_number) + L"  •  الجزء " + num_str(a.juz_number) +
                    L"  •  الحزب " + num_str(a.hizb_number));
+            if (!marked_ids.empty()) {
+                pos += is_en() ? (L" • Highlighted: " + std::to_wstring(marked_ids.size()))
+                               : (L"  •  المظلل: " + ayah_count_ar((int)marked_ids.size(), false));
+            }
             SetWindowTextW(lbl_position, pos.c_str());
         }
     }
@@ -1340,6 +1352,58 @@ public:
         invalidate_nav_arrows();
     }
 
+    // هل الصف داخل نطاق السحب الجاري (معاينة التظليل قبل رفع الزر)؟
+    bool row_in_drag(int row) const {
+        if (!mark_dragging || mark_drag_start < 0 || mark_drag_end < 0) return false;
+        int a = std::min(mark_drag_start, mark_drag_end), b = std::max(mark_drag_start, mark_drag_end);
+        return row >= a && row <= b;
+    }
+
+    bool row_is_marked(int row) const {
+        if (row < 0 || row >= (int)ayah_items.size()) return false;
+        const auto& it = ayah_items[row];
+        if (it.kind != ListItemKind::Ayah) return false;
+        return marked_ids.count(it.ayah.id) > 0 || row_in_drag(row);
+    }
+
+    // إضافة الآيات بين صفين إلى التظليل (عناوين السور والبسملة لا تُظلَّل)
+    void mark_rows(int r1, int r2) {
+        int a = std::max(0, std::min(r1, r2));
+        int b = std::min((int)ayah_items.size() - 1, std::max(r1, r2));
+        for (int i = a; i <= b; ++i) {
+            if (ayah_items[i].kind == ListItemKind::Ayah) marked_ids.insert(ayah_items[i].ayah.id);
+        }
+        on_marks_changed();
+    }
+
+    void toggle_mark_row(int row) {
+        if (row < 0 || row >= (int)ayah_items.size() || ayah_items[row].kind != ListItemKind::Ayah) return;
+        int id = ayah_items[row].ayah.id;
+        if (!marked_ids.erase(id)) marked_ids.insert(id);
+        on_marks_changed();
+    }
+
+    void clear_marks() {
+        if (marked_ids.empty()) return;
+        marked_ids.clear();
+        on_marks_changed();
+        say(tr(L"تم إلغاء التظليل", L"Highlighting cleared"));
+    }
+
+    // تمييز العدد بالعربية: آية واحدة، آيتان، ٣ آيات، ١١ آية
+    std::wstring ayah_count_ar(int n, bool spoken) const {
+        std::wstring d = spoken ? std::to_wstring(n) : num_str(n);
+        if (n == 1) return L"آية واحدة";
+        if (n == 2) return L"آيتان";
+        if (n >= 3 && n <= 10) return d + L" آيات";
+        return d + L" آية";
+    }
+
+    void on_marks_changed() {
+        if (list_ayahs) InvalidateRect(list_ayahs, nullptr, FALSE);
+        if (const AyahInfo* a = focused_ayah()) update_window_title_for_ayah(*a);
+    }
+
     // الصف المحدد في قائمة الآيات (آية أو عنوان سورة أو بيانها أو البسملة)
     const AyahListItemData* current_row() const {
         int sel = (int)SendMessageW(list_ayahs, LB_GETCURSEL, 0, 0);
@@ -1399,6 +1463,22 @@ public:
     }
 
     void copy_current_ayah(bool force_plain = false) {
+        // إن ظلّل المبصر آيات بالفأرة تُنسخ كلها بترتيب المصحف
+        if (!marked_ids.empty()) {
+            std::wstring all;
+            int n = 0;
+            for (int id : marked_ids) {
+                AyahInfo a;
+                if (!db->get_ayah_by_id(id, a)) continue;
+                if (n++ > 0) all += L"\r\n";
+                all += format_ayah_custom(a, force_plain ? L"plain" : settings.copy_script,
+                                          force_plain ? false : settings.copy_brackets,
+                                          settings.copy_reference, settings.copy_arabic_digits);
+            }
+            set_clipboard_text(hwnd, all);
+            say(tr(L"تم نسخ المظلل: " + ayah_count_ar(n, true), L"Copied " + std::to_wstring(n) + L" highlighted ayahs"));
+            return;
+        }
         // على عنوان السورة أو بيانها يُنسخ بيان السورة، وعلى البسملة تُنسخ البسملة
         if (const AyahListItemData* r = current_row()) {
             if (r->kind == ListItemKind::SurahHeader || r->kind == ListItemKind::SurahDetails) {
@@ -1670,8 +1750,11 @@ static void show_ayah_context_menu(HWND /*hwnd*/, int x, int y) {
 
     bool in_bm = std::find(g_app->settings.bookmarks.begin(), g_app->settings.bookmarks.end(), a->verse_key) != g_app->settings.bookmarks.end();
     HMENU menu = CreatePopupMenu();
-    AppendMenuW(menu, MF_STRING, IDM_COPY_AYAH,       g_app->tr(L"نسخ الآية\tEnter", L"Copy the ayah\tEnter").c_str());
-    AppendMenuW(menu, MF_STRING, IDM_COPY_PLAIN,      g_app->tr(L"نسخ الآية بدون تشكيل\tShift+C", L"Copy the ayah without diacritics\tShift+C").c_str());
+    AppendMenuW(menu, MF_STRING, IDM_COPY_AYAH,       g_app->tr(L"نسخ\tEnter", L"Copy\tEnter").c_str());
+    AppendMenuW(menu, MF_STRING, IDM_COPY_PLAIN,      g_app->tr(L"نسخ بدون تشكيل\tShift+C", L"Copy without diacritics\tShift+C").c_str());
+    if (!g_app->marked_ids.empty()) {
+        AppendMenuW(menu, MF_STRING, IDM_CLEAR_MARKS, g_app->tr(L"إلغاء التظليل", L"Clear highlighting").c_str());
+    }
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     std::wstring sc_ai = g_app->sc(IDM_AYAH_INFO);
     AppendMenuW(menu, MF_STRING, IDM_AYAH_INFO,
@@ -1738,9 +1821,43 @@ static LRESULT CALLBACK AyahListSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
         }
     }
     if (msg == WM_LBUTTONDOWN && g_app) {
+        // بداية سحب محتمل للتظليل
+        LRESULT hit = SendMessageW(hwnd, LB_ITEMFROMPOINT, 0, lParam);
+        g_app->mark_dragging = (HIWORD(hit) == 0);
+        g_app->mark_drag_start = g_app->mark_dragging ? (int)LOWORD(hit) : -1;
+        g_app->mark_drag_end = g_app->mark_drag_start;
+        g_app->mark_drag_origin = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         // النقر على صف تكميلي من آية طويلة يحدد الآية كلها من أول صف فيها
         LRESULT r = CallWindowProcW(g_orig_ayah_list_proc, hwnd, msg, wParam, lParam);
         g_app->snap_ayah_selection(false);
+        return r;
+    }
+    if (msg == WM_MOUSEMOVE && g_app && g_app->mark_dragging && (wParam & MK_LBUTTON)) {
+        // الصف تحت المؤشر يُقرأ قبل أن تمرّر القائمة نفسها أثناء السحب
+        LRESULT hit = SendMessageW(hwnd, LB_ITEMFROMPOINT, 0, lParam);
+        int row = (int)LOWORD(hit);
+        LRESULT r = CallWindowProcW(g_orig_ayah_list_proc, hwnd, msg, wParam, lParam);
+        int dx = GET_X_LPARAM(lParam) - g_app->mark_drag_origin.x, dy = GET_Y_LPARAM(lParam) - g_app->mark_drag_origin.y;
+        bool moved = (dx * dx + dy * dy) > 36;   // أكثر من ٦ بكسل: سحب لا نقرة
+        if (moved && row != g_app->mark_drag_end) {
+            g_app->mark_drag_end = row;
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
+        return r;
+    }
+    if (msg == WM_LBUTTONUP && g_app && g_app->mark_dragging) {
+        LRESULT r = CallWindowProcW(g_orig_ayah_list_proc, hwnd, msg, wParam, lParam);
+        int dx = GET_X_LPARAM(lParam) - g_app->mark_drag_origin.x, dy = GET_Y_LPARAM(lParam) - g_app->mark_drag_origin.y;
+        bool moved = (dx * dx + dy * dy) > 36;
+        int start = g_app->mark_drag_start, end = g_app->mark_drag_end;
+        g_app->mark_dragging = false;
+        if (moved && start >= 0) {
+            g_app->mark_rows(start, end);            // سحب: يضيف النطاق إلى التظليل السابق
+        } else if (start >= 0 && (wParam & MK_CONTROL)) {
+            g_app->toggle_mark_row(start);           // Ctrl+نقرة: تظليل آية واحدة أو إلغاؤه
+        } else {
+            InvalidateRect(hwnd, nullptr, FALSE);
+        }
         return r;
     }
     if (msg == WM_CONTEXTMENU && g_app) {
@@ -2048,7 +2165,13 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                     selected = (g_app->ayah_items[cur_sel].first_row == item.first_row);
                 }
 
-                COLORREF bg = selected ? pal.selected_bg : (is_banner ? pal.surah_banner_bg : pal.paper_bg);
+                // الآية المظللة بالفأرة: لون ذهبي خفيف يبقى ظاهراً حتى وهي محددة (والشريط الذهبي يدل على التحديد)
+                const bool marked = g_app->row_is_marked(idx);
+                COLORREF marked_bg = RGB((GetRValue(pal.paper_bg) * 2 + GetRValue(pal.selected_border)) / 3,
+                                         (GetGValue(pal.paper_bg) * 2 + GetGValue(pal.selected_border)) / 3,
+                                         (GetBValue(pal.paper_bg) * 2 + GetBValue(pal.selected_border)) / 3);
+                COLORREF bg = marked ? marked_bg
+                            : selected ? pal.selected_bg : (is_banner ? pal.surah_banner_bg : pal.paper_bg);
                 COLORREF fg = (item.kind == ListItemKind::SurahHeader) ? pal.text_header : pal.text_quran;
 
                 HBRUSH br = CreateSolidBrush(bg);
@@ -2254,6 +2377,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         case IDM_NEXT_UNIT:        g_app->navigate_unit(+1); return 0;
         case IDM_PREV_UNIT:        g_app->navigate_unit(-1); return 0;
         case IDM_COPY_AYAH:        g_app->copy_current_ayah(false); return 0;
+        case IDM_CLEAR_MARKS:      g_app->clear_marks(); return 0;
         case IDM_COPY_PLAIN:       g_app->copy_current_ayah(true); return 0;
         case IDM_TOGGLE_BOOKMARK:  g_app->toggle_bookmark_at_current(); return 0;
         case IDM_SET_KHATMAH:      g_app->set_khatmah_at_current(); return 0;
@@ -2750,6 +2874,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"Applications key or Shift+F10 on a surah heading or in the surah list: surah menu (surah information, copy heading, copy whole surah)");
                 lines.push_back(L"Enter / Ctrl+C / F8: Copy current ayah to clipboard");
                 lines.push_back(L"Shift+C: Copy current ayah as plain text without diacritics");
+                lines.push_back(L"Mouse: drag over ayahs to highlight them (each drag adds to the highlight, Ctrl+click toggles one ayah); Copy then copies all highlighted ayahs");
                 lines.push_back(L"M / Ctrl+M: Set Reading Stop Mark (Khatmah) at current ayah");
                 lines.push_back(L"B: Add or remove current ayah from bookmarks");
                 lines.push_back(L"I: Speak quick ayah position info");
@@ -2761,6 +2886,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"زر التطبيقات أو Shift+F10 على عنوان السورة أو في فهرس السور: قائمة السورة (معلومات السورة، ونسخ بيانها، ونسخها كاملة)");
                 lines.push_back(L"Enter أو Ctrl+C أو F8: نسخ الآية الحالية إلى الحافظة");
                 lines.push_back(L"Shift+C: نسخ الآية الحالية بنص إملائي مجرد بدون تشكيل");
+                lines.push_back(L"بالفأرة: اسحب على الآيات لتظليلها (كل سحب يضيف إلى التظليل السابق، و Ctrl مع النقر يظلل آية واحدة أو يلغيها)، ثم «نسخ» ينسخ كل المظلل");
                 lines.push_back(L"M أو Ctrl+M: وضع فاصل الختمة (علامة التوقف للقراءة) عند الآية الحالية");
                 lines.push_back(L"B: إضافة أو إزالة الآية الحالية من المفضلة");
                 lines.push_back(L"حرف I: نطق سريع لموضع الآية (السورة، الصفحة، الجزء، الحزب، الربع، المنزلة)");
