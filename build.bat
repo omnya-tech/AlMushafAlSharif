@@ -33,6 +33,8 @@ if not "%ZIG_EXE%"=="" (
     echo [*] Building 64-bit executable ^(AlMushafAlSharif-x64.exe^)...
     "%ZIG_EXE%" c++ -target x86_64-windows-gnu -std=c++17 -O2 -s -municode -Wl,--subsystem,windows %INC_FLAGS% %SRC_FILES% "%ROOT_DIR%src\app.rc" "%ROOT_DIR%build\sqlite3_x64.o" -o "%ROOT_DIR%bin\AlMushafAlSharif-x64.exe" %WIN_LIBS%
     if errorlevel 1 exit /b 1
+    call :selftest "%ROOT_DIR%bin\AlMushafAlSharif-x64.exe"
+    if errorlevel 1 exit /b 1
 
     if not exist "%ROOT_DIR%build\sqlite3_x86.o" (
         echo [*] Compiling SQLite3 for 32-bit ^(Windows 7+ x86^)...
@@ -41,6 +43,8 @@ if not "%ZIG_EXE%"=="" (
     )
     echo [*] Building 32-bit Windows 7+ executable ^(AlMushafAlSharif-win7-x86.exe^)...
     "%ZIG_EXE%" c++ -target x86-windows-gnu -std=c++17 -O2 -s -municode -Wl,--subsystem,windows %INC_FLAGS% %SRC_FILES% "%ROOT_DIR%src\app.rc" "%ROOT_DIR%build\sqlite3_x86.o" -o "%ROOT_DIR%bin\AlMushafAlSharif-win7-x86.exe" %WIN_LIBS%
+    if errorlevel 1 exit /b 1
+    call :selftest "%ROOT_DIR%bin\AlMushafAlSharif-win7-x86.exe"
     if errorlevel 1 exit /b 1
 
     echo [+] Build succeeded in: "%ROOT_DIR%bin"
@@ -63,6 +67,8 @@ if %errorlevel%==0 (
     if errorlevel 1 exit /b 1
     g++ -std=c++17 -O2 -s -municode -mwindows -static %INC_FLAGS% %SRC_FILES% "%ROOT_DIR%build\app_res.o" "%ROOT_DIR%build\sqlite3.o" -o "%ROOT_DIR%bin\!OUT_NAME!" %WIN_LIBS%
     if errorlevel 1 exit /b 1
+    call :selftest "%ROOT_DIR%bin\!OUT_NAME!"
+    if errorlevel 1 exit /b 1
     echo [+] Build succeeded in: "%ROOT_DIR%bin\!OUT_NAME!"
     exit /b 0
 )
@@ -79,9 +85,24 @@ if %errorlevel%==0 (
     if errorlevel 1 exit /b 1
     cl /nologo /O2 /EHsc /utf-8 /std:c++17 /DUNICODE /D_UNICODE /DNOMINMAX /DSQLITE_THREADSAFE=0 /DSQLITE_OMIT_LOAD_EXTENSION=1 /I"%ROOT_DIR%src" /I"%ROOT_DIR%third_party\sqlite3" %SRC_FILES% "%ROOT_DIR%third_party\sqlite3\sqlite3.c" "%ROOT_DIR%build\app.res" /Fo"%ROOT_DIR%build\\" /Fe:"%ROOT_DIR%bin\!OUT_NAME!" /link /SUBSYSTEM:WINDOWS gdi32.lib user32.lib kernel32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib winmm.lib comctl32.lib advapi32.lib
     if errorlevel 1 exit /b 1
+    call :selftest "%ROOT_DIR%bin\!OUT_NAME!"
+    if errorlevel 1 exit /b 1
     echo [+] Build succeeded in: "%ROOT_DIR%bin\!OUT_NAME!"
     exit /b 0
 )
 
 echo [!] No C++ compiler found in PATH ^(zig, MinGW g++, or MSVC cl.exe^).
 exit /b 1
+
+rem ---------------------------------------------------------------
+rem  Self-test: checks the Quran data, divisions, editions, shortcuts
+rem  and long-ayah layout. A failed self-test stops the build.
+rem ---------------------------------------------------------------
+:selftest
+echo [*] Running self-test: %~nx1
+start "" /b /wait "%~1" --self-test
+if errorlevel 1 (
+    echo [!] Self-test FAILED for %~nx1 - the build is not ready.
+    exit /b 1
+)
+exit /b 0

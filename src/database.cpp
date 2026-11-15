@@ -65,6 +65,12 @@ QuranDatabase::QuranDatabase(
         sqlite3_finalize(stmt);
     }
     page_first_ids_[L"madinah"] = madinah_starts;
+    EditionInfo madinah;
+    madinah.key = L"madinah";
+    madinah.name_ar = L"طبعة المدينة المنورة";
+    madinah.name_en = L"Madinah print";
+    madinah.page_count = (int)madinah_starts.size();
+    editions_.push_back(madinah);
 
     load_headings(headings_path);
     apply_page_mapping();
@@ -286,7 +292,7 @@ void QuranDatabase::load_headings(const std::wstring& path) {
     }
 }
 
-// البرنامج يعتمد طبعة المدينة المنورة وحدها (٦٠٤ صفحات)، فتُحسب صفحات السور منها مرة واحدة.
+// صفحات السور تُحسب من تقسيم الطبعة الحالية
 void QuranDatabase::apply_page_mapping() {
     surahs_cache_ = base_surahs_;
     for (auto& s : surahs_cache_) {
@@ -297,6 +303,248 @@ void QuranDatabase::apply_page_mapping() {
         }
         surah_map_[s.number] = s;
     }
+}
+
+const EditionInfo* QuranDatabase::edition_info(const std::wstring& key) const {
+    for (const auto& e : editions_) if (e.key == key) return &e;
+    return nullptr;
+}
+
+std::wstring QuranDatabase::set_edition(const std::wstring& key) {
+    edition_ = (edition_info(key) && page_first_ids_.count(key)) ? key : L"madinah";
+    apply_page_mapping();
+    return edition_;
+}
+
+bool QuranDatabase::add_edition(const EditionCheck& checked) {
+    if (!checked.ok() || checked.info.key.empty() || checked.info.key == L"madinah") return false;
+    for (auto& e : editions_) {
+        if (e.key == checked.info.key) { e = checked.info; page_first_ids_[e.key] = checked.page_starts; return true; }
+    }
+    editions_.push_back(checked.info);
+    page_first_ids_[checked.info.key] = checked.page_starts;
+    page_info_cache_.erase(checked.info.key);
+    return true;
+}
+
+int QuranDatabase::load_editions_folder(const std::wstring& folder) {
+    int added = 0;
+    WIN32_FIND_DATAW fd{};
+    HANDLE h = FindFirstFileW((folder + L"\\*.csv").c_str(), &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    do {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
+        EditionCheck c = check_edition_file(folder + L"\\" + fd.cFileName);
+        if (add_edition(c)) ++added;   // الملف الذي فيه أخطاء لا يُعتمد، ويُفحص بأمر --check-edition
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return added;
+}
+
+// اسم السورة أو رقمها (بالأرقام العربية أو الإنجليزية، مع «سورة» أو بدونها) → رقمها، أو 0
+int QuranDatabase::surah_from_text(const std::wstring& token) const {
+    std::wstring t = to_western_digits(token);
+    bool digits = !t.empty();
+    for (wchar_t ch : t) if (!iswdigit(ch)) { digits = false; break; }
+    if (digits) {
+        int n = _wtoi(t.c_str());
+        return (n >= 1 && n <= 114) ? n : 0;
+    }
+    std::wstring q = normalize_arabic_search(token);
+    const std::wstring prefix = normalize_arabic_search(L"سورة ");
+    if (q.rfind(prefix, 0) == 0) q = q.substr(prefix.size());
+    while (!q.empty() && q.front() == L' ') q.erase(q.begin());
+    while (!q.empty() && q.back() == L' ') q.pop_back();
+    for (const auto& s : base_surahs_) {
+        if (normalize_arabic_search(s.name_arabic) == q) return s.number;
+    }
+    return 0;
+}
+
+EditionCheck QuranDatabase::check_edition_file(const std::wstring& path) const {
+    EditionCheck c = check_edition_text(read_file_utf8(path));
+    c.info.source = path;
+    if (c.info.key.empty()) {
+        // المفتاح من اسم الملف إن لم يُكتب في رأسه
+        size_t slash = path.find_last_of(L"\\/");
+        std::wstring name = (slash == std::wstring::npos) ? path : path.substr(slash + 1);
+        size_t dot = name.find_last_of(L'.');
+        c.info.key = (dot == std::wstring::npos) ? name : name.substr(0, dot);
+    }
+    if (c.info.name_ar.empty()) c.info.name_ar = c.info.key;
+    if (c.info.name_en.empty()) c.info.name_en = c.info.key;
+    return c;
+}
+
+// صيغة الملف (يفتحه Excel أو المفكرة):
+//   # key: dar_almaarif
+//   # name_ar: طبعة دار المعارف
+//   # name_en: Dar al-Maarif print
+//   الصفحة,السورة,الآية
+//   1,الفاتحة,1
+//   2,البقرة,1
+//   3,,6          ← السورة الفارغة تعني نفس سورة السطر السابق
+EditionCheck QuranDatabase::check_edition_text(const std::string& utf8_text) const {
+    EditionCheck c;
+    std::wstring text = to_wide(utf8_text);
+    if (!text.empty() && text[0] == 0xFEFF) text.erase(text.begin());
+    if (text.empty()) {
+        c.errors.push_back(L"الملف فارغ أو لا يمكن قراءته.");
+        return c;
+    }
+
+    std::vector<std::pair<int, int>> rows;   // (رقم الصفحة، رقم الآية العام)
+    int line_no = 0, last_surah = 0, expected_page = 1;
+    size_t pos = 0;
+    while (pos <= text.size()) {
+        size_t nl = text.find(L'\n', pos);
+        std::wstring line = text.substr(pos, (nl == std::wstring::npos) ? std::wstring::npos : nl - pos);
+        pos = (nl == std::wstring::npos) ? text.size() + 1 : nl + 1;
+        ++line_no;
+        while (!line.empty() && (line.back() == L'\r' || line.back() == L' ' || line.back() == L'\t')) line.pop_back();
+        while (!line.empty() && (line.front() == L' ' || line.front() == L'\t')) line.erase(line.begin());
+        if (line.empty()) continue;
+        const std::wstring ln = L"السطر " + std::to_wstring(line_no) + L": ";
+
+        if (line[0] == L'#') {   // بيانات الطبعة
+            size_t colon = line.find(L':');
+            if (colon != std::wstring::npos) {
+                std::wstring k = line.substr(1, colon - 1), v = line.substr(colon + 1);
+                auto trim = [](std::wstring& s) {
+                    while (!s.empty() && s.front() == L' ') s.erase(s.begin());
+                    while (!s.empty() && s.back() == L' ') s.pop_back();
+                };
+                trim(k); trim(v);
+                if (k == L"key") c.info.key = v;
+                else if (k == L"name_ar") c.info.name_ar = v;
+                else if (k == L"name_en") c.info.name_en = v;
+            }
+            continue;
+        }
+
+        // تقسيم الحقول: فاصلة أو فاصلة عربية أو فاصلة منقوطة أو جدولة
+        std::vector<std::wstring> f;
+        std::wstring cur;
+        for (wchar_t ch : line) {
+            if (ch == L',' || ch == 0x060C || ch == L';' || ch == 0x061B || ch == L'\t') { f.push_back(cur); cur.clear(); }
+            else cur.push_back(ch);
+        }
+        f.push_back(cur);
+        for (auto& x : f) {
+            while (!x.empty() && x.front() == L' ') x.erase(x.begin());
+            while (!x.empty() && x.back() == L' ') x.pop_back();
+        }
+        if (f.size() < 3) { c.errors.push_back(ln + L"يجب أن يحتوي على الصفحة والسورة والآية."); continue; }
+
+        std::wstring p_txt = to_western_digits(f[0]), a_txt = to_western_digits(f[2]);
+        bool p_num = !p_txt.empty(), a_num = !a_txt.empty();
+        for (wchar_t ch : p_txt) if (!iswdigit(ch)) p_num = false;
+        for (wchar_t ch : a_txt) if (!iswdigit(ch)) a_num = false;
+        if (!p_num && rows.empty() && line_no <= 5) continue;   // سطر العناوين
+        if (!p_num) { c.errors.push_back(ln + L"رقم الصفحة غير صحيح: " + f[0]); continue; }
+
+        int page = _wtoi(p_txt.c_str());
+        int surah = f[1].empty() ? last_surah : surah_from_text(f[1]);
+        if (surah == 0) { c.errors.push_back(ln + L"لم أتعرف على السورة: " + (f[1].empty() ? L"(فارغة في أول سطر)" : f[1])); continue; }
+        if (!a_num) { c.errors.push_back(ln + L"رقم الآية غير صحيح: " + f[2]); continue; }
+        int ayah = _wtoi(a_txt.c_str());
+        last_surah = surah;
+
+        auto it = key_to_id_.find({surah, ayah});
+        if (it == key_to_id_.end()) {
+            auto sm = surah_map_.find(surah);
+            int cnt = (sm != surah_map_.end()) ? sm->second.verses_count : 0;
+            c.errors.push_back(ln + L"لا توجد الآية " + std::to_wstring(ayah) + L" في سورة " +
+                               (sm != surah_map_.end() ? sm->second.name_arabic : std::to_wstring(surah)) +
+                               L" (عدد آياتها " + std::to_wstring(cnt) + L").");
+            continue;
+        }
+        if (page != expected_page) {
+            c.errors.push_back(ln + L"الصفحة " + std::to_wstring(page) + L" جاءت بدلاً من الصفحة " +
+                               std::to_wstring(expected_page) + L" (صفحة ناقصة أو مكررة؟).");
+            expected_page = page;
+        }
+        ++expected_page;
+        if (!rows.empty() && it->second <= rows.back().second) {
+            c.errors.push_back(ln + L"الصفحة " + std::to_wstring(page) + L" تبدأ بآية قبل بداية الصفحة السابقة أو عندها.");
+        }
+        rows.push_back({page, it->second});
+    }
+
+    if (rows.empty()) {
+        if (c.errors.empty()) c.errors.push_back(L"لم أجد أي صفحة في الملف.");
+        return c;
+    }
+    if (rows.front().second != 1) c.errors.push_back(L"الصفحة الأولى يجب أن تبدأ بأول الفاتحة (الفاتحة، الآية ١).");
+    for (const auto& r : rows) c.page_starts.push_back(r.second);
+    c.info.page_count = (int)c.page_starts.size();
+    if (!c.errors.empty()) return c;
+
+    // فحص الحدود بين الصفحات: صفحات المصحف متقاربة في كمية النص، والبداية المكتوبة خطأً تنقل
+    // آيات من صفحة إلى جارتها، فتطول إحداهما وتقصر الأخرى معاً. نقارن كل صفحتين متجاورتين
+    // بالصفحات القريبة منهما، ونحسب لعنوان السورة والبسملة مساحة سطرين تقريباً.
+    if (ayah_text_len_.empty()) {
+        ayah_text_len_.assign(max_id_ + 2, 0);
+        sqlite3_stmt* st = nullptr;
+        if (sqlite3_prepare_v2(db_, "SELECT id, length(text_simple) FROM ayahs", -1, &st, nullptr) == SQLITE_OK) {
+            while (sqlite3_step(st) == SQLITE_ROW) {
+                int id = sqlite3_column_int(st, 0);
+                if (id >= 0 && id < (int)ayah_text_len_.size()) ayah_text_len_[id] = sqlite3_column_int(st, 1);
+            }
+            sqlite3_finalize(st);
+        }
+    }
+    const int n = (int)c.page_starts.size();
+    std::set<int> surah_first_ids;
+    for (const auto& kv : surah_id_bounds_) surah_first_ids.insert(kv.second.first);
+    std::vector<long> raw(n, 0);
+    std::vector<int> headers(n, 0);
+    for (int i = 0; i < n; ++i) {
+        int a = c.page_starts[i], b = (i + 1 < n) ? c.page_starts[i + 1] - 1 : max_id_;
+        for (int id = a; id <= b && id < (int)ayah_text_len_.size(); ++id) {
+            raw[i] += ayah_text_len_[id];
+            if (surah_first_ids.count(id)) ++headers[i];
+        }
+    }
+    std::vector<long> plain(raw.begin() + std::min(2, n), raw.end());
+    if (n > 8 && !plain.empty()) {
+        std::sort(plain.begin(), plain.end());
+        const long header_w = plain[plain.size() / 2] / 8;   // عنوان السورة والبسملة ≈ سطران من ١٥
+        std::vector<double> sz(n);
+        for (int i = 0; i < n; ++i) sz[i] = (double)(raw[i] + headers[i] * header_w);
+        for (int j = 3; j < n - 1; ++j) {          // الحد بين الصفحة j والصفحة j+1 (بترقيم يبدأ من ١)
+            int i = j - 1;                          // فهرس الصفحة السابقة
+            std::vector<double> nb;
+            for (int x = std::max(2, i - 6); x <= std::min(n - 2, j + 6); ++x) {
+                if (x != i && x != j) nb.push_back(sz[x]);
+            }
+            if (nb.size() < 3) continue;
+            std::sort(nb.begin(), nb.end());
+            double med = nb[nb.size() / 2];
+            if (med <= 0) continue;
+            double r1 = sz[i] / med, r2 = sz[j] / med;
+            bool long_short = r1 > 1.15 && r2 < 0.85;
+            bool short_long = r1 < 0.85 && r2 > 1.15;
+            if (!long_short && !short_long) continue;
+            std::wstring where;
+            auto k = id_to_key_.find(c.page_starts[j]);
+            if (k != id_to_key_.end()) {
+                auto sm = surah_map_.find(k->second.first);
+                where = L" (مكتوب أنها تبدأ بسورة " + (sm != surah_map_.end() ? sm->second.name_arabic : L"") +
+                        L"، الآية " + std::to_wstring(k->second.second) + L")";
+            }
+            c.warnings.push_back(L"بداية الصفحة " + std::to_wstring(j + 1) + where + L": " +
+                (long_short ? L"الصفحة التي قبلها أطول من المعتاد وهذه أقصر، فربما بدايتها متأخرة بآية أو أكثر."
+                            : L"الصفحة التي قبلها أقصر من المعتاد وهذه أطول، فربما بدايتها متقدمة بآية أو أكثر."));
+        }
+    }
+    // المصاحف المطبوعة بين ٥٠٠ و ٩٠٠ صفحة تقريباً؛ الملف الأقصر من ذلك لم يكتمل بعد
+    // (تبقى الملاحظات أعلاه مفيدة لمراجعة ما أُدخل حتى الآن)
+    if (n < 300) {
+        c.errors.push_back(L"الملف فيه " + std::to_wstring(n) +
+                           L" صفحة فقط، ويبدو أنه لم يكتمل بعد. أكمل بدايات بقية الصفحات حتى آخر المصحف.");
+    }
+    return c;
 }
 
 int QuranDatabase::page_count() const {

@@ -8,6 +8,7 @@
 #include "shortcuts.hpp"
 #include "dialogs.hpp"
 #include <commctrl.h>
+#include <shellapi.h>
 #include <windowsx.h>
 
 #include <algorithm>
@@ -41,6 +42,8 @@ constexpr int kArrowDiameter = 42;
 
 enum MenuIds : UINT {
     ID_COMBO_BROWSE           = 102,
+    ID_COMBO_EDITION          = 111,
+    IDM_EDITION_FIRST         = 1050,   // 1050.. لكل طبعة متاحة
     ID_LIST_UNITS             = 103,
     ID_LIST_AYAHS             = 104,
     ID_EDIT_SIDEBAR_FILTER    = 105,
@@ -137,6 +140,8 @@ static WNDPROC g_orig_ayah_list_proc = nullptr;
 class MushafAppWindow {
 public:
     HWND hwnd = nullptr;
+    HWND lbl_edition = nullptr;    // «الطبعة» — تظهر فقط إذا توفرت أكثر من طبعة
+    HWND combo_edition = nullptr;
     HWND lbl_browse = nullptr;
     HWND combo_browse = nullptr;
     HWND btn_search = nullptr;     // زر «بحث في القرآن» بجوار «تصفح حسب»
@@ -333,13 +338,13 @@ public:
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Amiri"
         );
 
-        ThemePalette pal = get_theme_palette(settings.theme);
+        ThemePalette pal = get_theme_palette(effective_theme());
         brush_paper = CreateSolidBrush(pal.paper_bg);
         brush_toolbar = CreateSolidBrush(pal.toolbar_bg);
         brush_window = CreateSolidBrush(pal.window_bg);
 
         // الخطوط القديمة حُذفت للتو، فلا بد من ربط الجديدة بكل عنصر وإلا رجع لخط النظام
-        for (HWND w : {lbl_browse, combo_browse, btn_search, lbl_position, edit_sidebar_filter, tab_sidebar,
+        for (HWND w : {lbl_edition, combo_edition, lbl_browse, combo_browse, btn_search, lbl_position, edit_sidebar_filter, tab_sidebar,
                        list_sidebar_index, list_sidebar_bookmarks, btn_sb_copy_bm, btn_sb_del_bm}) {
             if (w) SendMessageW(w, WM_SETFONT, (WPARAM)font_ui, TRUE);
         }
@@ -348,7 +353,93 @@ public:
     }
 
     std::wstring edition_short_label() const {
+        if (db) {
+            if (const EditionInfo* e = db->edition_info(db->edition())) return is_en() ? e->name_en : e->name_ar;
+        }
         return tr(L"طبعة المدينة", L"Madinah print");
+    }
+
+    bool has_multiple_editions() const { return db && db->editions().size() > 1; }
+
+    // «٦٠٤ صفحات» و«٣٠٢ صفحة»: الجمع إذا انتهى العدد بـ ٣ إلى ١٠، والمفرد فيما سواه
+    std::wstring pages_ar(int n) const {
+        int r = n % 100;
+        return num_str(n) + ((r >= 3 && r <= 10) ? L" صفحات" : L" صفحة");
+    }
+
+    bool restarting = false;   // يُعاد فتح البرنامج (لتغيير اللغة): لا نحفظ مرة ثانية عند الإغلاق
+
+    // حفظ موضع القراءة وحجم النافذة في الإعدادات
+    void save_state() {
+        settings.last_surah = current_surah;
+        settings.last_page = current_page;
+        settings.last_juz = current_juz;
+        settings.last_hizb = current_hizb;
+        settings.last_rub = current_rub;
+        settings.last_manzil = current_manzil;
+        settings.last_ruku = current_ruku;
+        settings.last_ayah = current_ayah_num;
+        WINDOWPLACEMENT wp{};
+        wp.length = sizeof(wp);
+        if (hwnd && GetWindowPlacement(hwnd, &wp)) {
+            const RECT& r = wp.rcNormalPosition;
+            settings.window_x = r.left;
+            settings.window_y = r.top;
+            settings.window_w = r.right - r.left;
+            settings.window_h = r.bottom - r.top;
+            settings.window_maximized = (wp.showCmd == SW_SHOWMAXIMIZED);
+        }
+        settings.save();
+    }
+
+    // اتجاه النافذة (من اليمين أو من اليسار) يُحدَّد عند إنشائها، فتغيير اللغة يعيد فتح البرنامج
+    // على الآية نفسها وبالحجم نفسه
+    void relaunch_for_language() {
+        say(tr(L"يُعاد فتح البرنامج باللغة العربية", L"Reopening the program in English"));
+        save_state();
+        wchar_t exe[MAX_PATH] = {0};
+        GetModuleFileNameW(nullptr, exe, MAX_PATH);
+        STARTUPINFOW si{};
+        si.cb = sizeof(si);
+        PROCESS_INFORMATION pi{};
+        if (CreateProcessW(exe, nullptr, nullptr, nullptr, FALSE, 0, nullptr, nullptr, &si, &pi)) {
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            restarting = true;
+            DestroyWindow(hwnd);
+        } else {
+            // إن تعذّر إعادة الفتح نطبّق اللغة على النصوص على الأقل
+            build_menus();
+            populate_toolbar_combos();
+            load_current_browse_unit(current_ayah_num, current_surah);
+        }
+    }
+
+    // وضع التباين العالي في ويندوز يفرض مظهر التباين العالي في البرنامج دون تغيير اختيار المستخدم
+    static bool system_high_contrast() {
+        HIGHCONTRASTW hc{};
+        hc.cbSize = sizeof(hc);
+        return SystemParametersInfoW(SPI_GETHIGHCONTRAST, sizeof(hc), &hc, 0) && (hc.dwFlags & HCF_HIGHCONTRASTON);
+    }
+    std::wstring effective_theme() const {
+        return system_high_contrast() ? std::wstring(L"high_contrast") : settings.theme;
+    }
+
+    // التحويل إلى طبعة أخرى مع البقاء على الآية نفسها
+    void switch_edition(const std::wstring& key) {
+        AyahInfo keep;
+        bool have = db->get_ayah(current_surah, current_ayah_num, keep);
+        settings.mushaf_edition = db->set_edition(key);
+        settings.save();
+        units_cache_key.clear();
+        build_menus();
+        populate_toolbar_combos();
+        if (have) {
+            AyahInfo fresh;
+            if (db->get_ayah_by_id(keep.id, fresh)) jump_to_ayah(fresh);
+        }
+        say(tr(L"تم التحويل إلى " + edition_short_label() + L"، " + std::to_wstring(db->page_count()) + L" صفحة",
+               L"Switched to " + edition_short_label() + L", " + std::to_wstring(db->page_count()) + L" pages"));
     }
 
     bool list_is_rtl(HWND w) const {
@@ -419,12 +510,24 @@ public:
         // 1) التصفح والتنقل
         HMENU m_nav = CreatePopupMenu();
         AppendMenuW(m_nav, MF_STRING, IDM_BROWSE_SURAH,  lbl(L"التصفح بالسور (١١٤ سورة)", L"Browse by surah (114)", IDM_BROWSE_SURAH).c_str());
-        AppendMenuW(m_nav, MF_STRING, IDM_BROWSE_PAGE,   lbl(L"التصفح بالصفحات (٦٠٤ صفحات)", L"Browse by page (604)", IDM_BROWSE_PAGE).c_str());
+        AppendMenuW(m_nav, MF_STRING, IDM_BROWSE_PAGE,   lbl(L"التصفح بالصفحات (" + pages_ar(db->page_count()) + L")",
+                                                                 L"Browse by page (" + std::to_wstring(db->page_count()) + L")", IDM_BROWSE_PAGE).c_str());
         AppendMenuW(m_nav, MF_STRING, IDM_BROWSE_JUZ,    lbl(L"التصفح بالأجزاء (٣٠ جزءاً)", L"Browse by juz (30)", IDM_BROWSE_JUZ).c_str());
         AppendMenuW(m_nav, MF_STRING, IDM_BROWSE_RUB,    lbl(L"التصفح بالأرباع (٢٤٠ ربعاً)", L"Browse by quarter (240)", IDM_BROWSE_RUB).c_str());
         AppendMenuW(m_nav, MF_STRING, IDM_BROWSE_HIZB,   lbl(L"التصفح بالأحزاب (٦٠ حزباً)", L"Browse by hizb (60)", IDM_BROWSE_HIZB).c_str());
         AppendMenuW(m_nav, MF_STRING, IDM_BROWSE_MANZIL, lbl(L"التصفح بالمنازل السبعة (ختمة الأسبوع — فمي بشوق)", L"Browse by the Seven Manzils (weekly reading)", IDM_BROWSE_MANZIL).c_str());
         AppendMenuW(m_nav, MF_STRING, IDM_BROWSE_RUKU,   lbl(L"التصفح بالركوعات (٥٥٨ ركوعاً)", L"Browse by ruku (558)", IDM_BROWSE_RUKU).c_str());
+        if (has_multiple_editions()) {
+            // اختيار الطبعة يظهر فقط حين تتوفر أكثر من طبعة
+            HMENU m_ed = CreatePopupMenu();
+            const auto& eds = db->editions();
+            for (size_t i = 0; i < eds.size(); ++i) {
+                std::wstring nm = (is_en() ? eds[i].name_en : eds[i].name_ar) +
+                    tr(L" (" + pages_ar(eds[i].page_count) + L")", L" (" + std::to_wstring(eds[i].page_count) + L" pages)");
+                AppendMenuW(m_ed, MF_STRING | (eds[i].key == db->edition() ? MF_CHECKED : 0), IDM_EDITION_FIRST + (UINT)i, nm.c_str());
+            }
+            AppendMenuW(m_nav, MF_POPUP, (UINT_PTR)m_ed, tr(L"طبعة المصحف", L"Mushaf print").c_str());
+        }
         AppendMenuW(m_nav, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m_nav, MF_STRING, IDM_GOTO,            lbl(L"انتقال سريع إلى سورة / آية / صفحة / جزء / ربع...", L"Go to surah / ayah / page / juz / quarter...", IDM_GOTO).c_str());
         AppendMenuW(m_nav, MF_STRING, IDM_SEARCH,          lbl(L"البحث الشامل في آيات القرآن الكريم...", L"Search the Quran...", IDM_SEARCH).c_str());
@@ -498,6 +601,15 @@ public:
 
     void populate_toolbar_combos() {
         updating_combos = true;
+        if (combo_edition) {
+            SetWindowTextW(lbl_edition, tr(L"ال&طبعة:", L"&Print:").c_str());
+            SendMessageW(combo_edition, CB_RESETCONTENT, 0, 0);
+            const auto& eds = db->editions();
+            for (size_t i = 0; i < eds.size(); ++i) {
+                SendMessageW(combo_edition, CB_ADDSTRING, 0, (LPARAM)(is_en() ? eds[i].name_en : eds[i].name_ar).c_str());
+                if (eds[i].key == db->edition()) SendMessageW(combo_edition, CB_SETCURSEL, i, 0);
+            }
+        }
         SetWindowTextW(lbl_browse, tr(L"&تصفح حسب:", L"&Browse by:").c_str());
         if (btn_search) {
             std::wstring s_sc = sc(IDM_SEARCH);
@@ -514,7 +626,7 @@ public:
 
         SendMessageW(combo_browse, CB_RESETCONTENT, 0, 0);
         std::wstring pages_lbl = tr(
-            L"الصفحات (" + num_str(db->page_count()) + L" صفحات)",
+            L"الصفحات (" + pages_ar(db->page_count()) + L")",
             L"Pages (" + std::to_wstring(db->page_count()) + L")"
         );
         const std::pair<std::wstring, std::wstring> modes[7] = {
@@ -641,7 +753,7 @@ public:
     std::wstring units_cache_key;
 
     void populate_units_list() {
-        std::wstring key = settings.browse_scope + L"|" + settings.ui_language;
+        std::wstring key = settings.browse_scope + L"|" + settings.ui_language + L"|" + db->edition();
         if (key == units_cache_key && !unit_numbers.empty()) {
             int target_unit = (settings.browse_scope == L"surah") ? current_surah
                             : (settings.browse_scope == L"page") ? current_page
@@ -1274,7 +1386,7 @@ public:
 
     // دائرة بإطار ذهبي وفي وسطها شارة اتجاه؛ visual_dir: -1 تشير لليسار المرئي، +1 لليمين المرئي
     void draw_nav_arrow(HDC hdc, const RECT& rc, int visual_dir, bool enabled, bool hover) const {
-        ThemePalette pal = get_theme_palette(settings.theme);
+        ThemePalette pal = get_theme_palette(effective_theme());
         auto blend = [](COLORREF a, COLORREF b) {
             return RGB((GetRValue(a) + GetRValue(b)) / 2, (GetGValue(a) + GetGValue(b)) / 2, (GetBValue(a) + GetBValue(b)) / 2);
         };
@@ -1396,7 +1508,7 @@ public:
         std::wstring d = spoken ? std::to_wstring(n) : num_str(n);
         if (n == 1) return L"آية واحدة";
         if (n == 2) return L"آيتان";
-        if (n >= 3 && n <= 10) return d + L" آيات";
+        if ((n % 100) >= 3 && (n % 100) <= 10) return d + L" آيات";
         return d + L" آية";
     }
 
@@ -1598,6 +1710,9 @@ public:
         if (sb_vis) populate_sidebar_index_list();
         int active_tab = tab_sidebar ? (int)SendMessageW(tab_sidebar, TCM_GETCURSEL, 0, 0) : 0;
 
+        bool ed_vis = !focus_mode && has_multiple_editions();
+        ShowWindow(lbl_edition,   ed_vis ? SW_SHOW : SW_HIDE);
+        ShowWindow(combo_edition, ed_vis ? SW_SHOW : SW_HIDE);
         ShowWindow(lbl_browse,    focus_mode ? SW_HIDE : SW_SHOW);
         ShowWindow(combo_browse,  focus_mode ? SW_HIDE : SW_SHOW);
         ShowWindow(btn_search,    focus_mode ? SW_HIDE : SW_SHOW);
@@ -1633,10 +1748,18 @@ public:
         int tb_h = focus_mode ? 0 : kToolbarHeight;
         if (!focus_mode) {
             // الشريط العلوي: «تصفح حسب» في البداية، وسطر الموضع الحالي في الطرف الآخر
-            MoveWindow(lbl_browse, 16, 13, 100, 26, TRUE);
-            MoveWindow(combo_browse, 120, 10, 340, 320, TRUE);
-            MoveWindow(btn_search, 474, 10, 210, 31, TRUE);
-            MoveWindow(lbl_position, 700, 12, std::max(0, width - 700 - 18), 28, TRUE);
+            // «الطبعة» أولاً إن وُجدت أكثر من طبعة، ثم «تصفح حسب» وزر البحث، وسطر الموضع في الطرف الآخر
+            int x = 16;
+            if (has_multiple_editions()) {
+                MoveWindow(lbl_edition, x, 13, 62, 26, TRUE);
+                MoveWindow(combo_edition, x + 66, 10, 220, 320, TRUE);
+                x += 66 + 220 + 18;
+            }
+            MoveWindow(lbl_browse, x, 13, 100, 26, TRUE);
+            MoveWindow(combo_browse, x + 104, 10, 340, 320, TRUE);
+            MoveWindow(btn_search, x + 458, 10, 210, 31, TRUE);
+            int px = x + 684;
+            MoveWindow(lbl_position, px, 12, std::max(0, width - px - 18), 28, TRUE);
         }
 
         int list_y = tb_h + 10;
@@ -2061,7 +2184,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         FillRect(hdc, &rc, g_app->brush_window);
         if (!g_app->focus_mode) {
             // شريط علوي هادئ يفصله عن صفحة المصحف خط ذهبي رفيع
-            ThemePalette pal = get_theme_palette(g_app->settings.theme);
+            ThemePalette pal = get_theme_palette(g_app->effective_theme());
             RECT tb = rc;
             tb.bottom = kToolbarHeight;
             FillRect(hdc, &tb, g_app->brush_toolbar);
@@ -2127,8 +2250,8 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
     case WM_CTLCOLORSTATIC: {
         if (!g_app) break;
         HWND ctl = (HWND)lParam;
-        if (ctl == g_app->lbl_browse || ctl == g_app->lbl_position) {
-            ThemePalette pal = get_theme_palette(g_app->settings.theme);
+        if (ctl == g_app->lbl_browse || ctl == g_app->lbl_position || ctl == g_app->lbl_edition) {
+            ThemePalette pal = get_theme_palette(g_app->effective_theme());
             HDC hdc = (HDC)wParam;
             SetBkColor(hdc, pal.toolbar_bg);
             SetTextColor(hdc, ctl == g_app->lbl_position ? pal.text_header : pal.text_quran);
@@ -2141,7 +2264,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         if (!g_app) break;
         HWND ctl = (HWND)lParam;
         if (ctl == g_app->list_ayahs || ctl == g_app->list_units) {
-            ThemePalette pal = get_theme_palette(g_app->settings.theme);
+            ThemePalette pal = get_theme_palette(g_app->effective_theme());
             HDC hdc = (HDC)wParam;
             SetBkColor(hdc, pal.paper_bg);
             SetTextColor(hdc, pal.text_quran);
@@ -2164,7 +2287,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             int idx = (int)dis->itemID;
             if (idx >= 0 && idx < (int)g_app->ayah_items.size()) {
                 const auto& item = g_app->ayah_items[idx];
-                ThemePalette pal = get_theme_palette(g_app->settings.theme);
+                ThemePalette pal = get_theme_palette(g_app->effective_theme());
                 const bool rtl = g_app->list_is_rtl(dis->hwndItem);
                 const bool is_ayah = (item.kind == ListItemKind::Ayah);
                 const bool is_banner = (item.kind == ListItemKind::SurahHeader || item.kind == ListItemKind::SurahDetails);
@@ -2351,6 +2474,18 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             return 0;
         }
 
+        if (id == ID_COMBO_EDITION && code == CBN_SELCHANGE && !g_app->updating_combos) {
+            int sel = (int)SendMessageW(g_app->combo_edition, CB_GETCURSEL, 0, 0);
+            const auto& eds = g_app->db->editions();
+            if (sel >= 0 && sel < (int)eds.size()) g_app->switch_edition(eds[sel].key);
+            return 0;
+        }
+        if (id >= IDM_EDITION_FIRST && id < IDM_EDITION_FIRST + 40) {
+            const auto& eds = g_app->db->editions();
+            size_t i = id - IDM_EDITION_FIRST;
+            if (i < eds.size()) g_app->switch_edition(eds[i].key);
+            return 0;
+        }
         if (id == ID_COMBO_BROWSE && code == CBN_SELCHANGE && !g_app->updating_combos) {
             int sel = (int)SendMessageW(g_app->combo_browse, CB_GETCURSEL, 0, 0);
             static const wchar_t* scopes[7] = {L"surah", L"page", L"juz", L"hizb", L"rub", L"manzil", L"ruku"};
@@ -2493,7 +2628,12 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         }
 
         case IDM_OPTIONS: {
+            std::wstring lang_before = g_app->settings.ui_language;
             if (show_options_dialog(hwnd, g_app->settings, g_app->focused_ayah(), g_app->is_en(), g_app->font_ui)) {
+                if (g_app->settings.ui_language != lang_before) {
+                    g_app->relaunch_for_language();
+                    return 0;
+                }
                 g_app->recreate_fonts_and_brushes();
                 g_app->rebuild_accelerators();
                 g_app->build_menus();
@@ -2980,13 +3120,13 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         }
 
         case IDM_LANG_AR:
-        case IDM_LANG_EN:
-            g_app->settings.ui_language = (id == IDM_LANG_EN) ? L"en" : L"ar";
-            g_app->settings.save();
-            g_app->build_menus();
-            g_app->populate_toolbar_combos();
-            g_app->load_current_browse_unit(g_app->current_ayah_num, g_app->current_surah);
+        case IDM_LANG_EN: {
+            std::wstring lang = (id == IDM_LANG_EN) ? L"en" : L"ar";
+            if (lang == g_app->settings.ui_language) return 0;
+            g_app->settings.ui_language = lang;
+            g_app->relaunch_for_language();
             return 0;
+        }
 
         case IDM_ABOUT: {
             // آية الحفظ تُقرأ من قاعدة البيانات نفسها حتى يطابق رسمها المصحف حرفاً بحرف
@@ -3035,28 +3175,17 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         break;
     }
 
-    case WM_DESTROY:
-        if (g_app) {
-            g_app->settings.last_surah = g_app->current_surah;
-            g_app->settings.last_page = g_app->current_page;
-            g_app->settings.last_juz = g_app->current_juz;
-            g_app->settings.last_hizb = g_app->current_hizb;
-            g_app->settings.last_rub = g_app->current_rub;
-            g_app->settings.last_manzil = g_app->current_manzil;
-            g_app->settings.last_ruku = g_app->current_ruku;
-            g_app->settings.last_ayah = g_app->current_ayah_num;
-            WINDOWPLACEMENT wp{};
-            wp.length = sizeof(wp);
-            if (GetWindowPlacement(hwnd, &wp)) {
-                const RECT& r = wp.rcNormalPosition;
-                g_app->settings.window_x = r.left;
-                g_app->settings.window_y = r.top;
-                g_app->settings.window_w = r.right - r.left;
-                g_app->settings.window_h = r.bottom - r.top;
-                g_app->settings.window_maximized = (wp.showCmd == SW_SHOWMAXIMIZED);
-            }
-            g_app->settings.save();
+    case WM_SYSCOLORCHANGE:
+    case WM_SETTINGCHANGE:
+        // تشغيل التباين العالي في ويندوز أو إيقافه أثناء عمل البرنامج
+        if (g_app && g_app->list_ayahs) {
+            g_app->recreate_fonts_and_brushes();
+            RedrawWindow(hwnd, nullptr, nullptr, RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN);
         }
+        break;
+
+    case WM_DESTROY:
+        if (g_app && !g_app->restarting) g_app->save_state();
         PostQuitMessage(0);
         return 0;
     }
@@ -3192,6 +3321,46 @@ static int run_self_test() {
         DeleteDC(hdc);
     }
 
+    // الطبعات: ملف بدايات صفحات المدينة نفسها يجب أن يُقبل ويعطي ٦٠٤ صفحات بالتقسيم نفسه
+    {
+        std::string csv = "# key: selftest\n# name_ar: طبعة اختبار\n# name_en: Test print\nالصفحة,السورة,الآية\n";
+        const auto& pages = app.db->get_page_info_list();
+        int prev_surah = 0;
+        for (const auto& d : pages) {
+            // السورة تُكتب بالاسم مرة وبالرقم مرة، وتُترك فارغة إذا لم تتغير
+            std::string sname;
+            if (d.start_surah_number != prev_surah) {
+                sname = (d.unit_number % 2) ? to_utf8(L"سورة " + d.start_surah_name) : std::to_string(d.start_surah_number);
+            }
+            prev_surah = d.start_surah_number;
+            csv += std::to_string(d.unit_number) + "," + sname + "," + std::to_string(d.start_ayah_number) + "\n";
+        }
+        EditionCheck chk = app.db->check_edition_text(csv);
+        SELFTEST_CHECK(chk.ok());
+        SELFTEST_CHECK(chk.info.page_count == 604);
+        SELFTEST_CHECK(chk.info.name_ar == L"طبعة اختبار");
+        SELFTEST_CHECK(app.db->add_edition(chk));
+        SELFTEST_CHECK(app.db->set_edition(L"selftest") == L"selftest");
+        SELFTEST_CHECK(app.db->page_count() == 604);
+        AyahInfo k2;
+        SELFTEST_CHECK(app.db->get_ayah(2, 255, k2) && k2.page_number == 42);
+        SELFTEST_CHECK(app.db->set_edition(L"madinah") == L"madinah");
+        SELFTEST_CHECK(app.db->set_edition(L"no-such-print") == L"madinah");
+
+        // أخطاء يجب أن تُكتشف: صفحة مكررة، وآية غير موجودة، وسورة غير معروفة، وترتيب معكوس
+        EditionCheck bad1 = app.db->check_edition_text("1,1,1\n2,2,1\n2,2,6\n");
+        SELFTEST_CHECK(!bad1.ok());
+        EditionCheck bad2 = app.db->check_edition_text("1,1,1\n2,2,300\n");
+        SELFTEST_CHECK(!bad2.ok());
+        EditionCheck bad3 = app.db->check_edition_text(to_utf8(L"1,1,1\n2,سورة ليست موجودة,1\n"));
+        SELFTEST_CHECK(!bad3.ok());
+        EditionCheck bad4 = app.db->check_edition_text("1,1,1\n2,2,10\n3,2,5\n");
+        SELFTEST_CHECK(!bad4.ok());
+        // الأرقام العربية والفاصلة العربية مقبولة
+        EditionCheck ar = app.db->check_edition_text(to_utf8(L"١،الفاتحة،١\n٢،البقرة،١\n"));
+        SELFTEST_CHECK(ar.page_starts.size() == 2 && ar.errors.size() == 1);   // سليم لكنه ناقص (صفحتان فقط)
+    }
+
     if (g_selftest_failures > 0) {
         std::fprintf(stderr, "%d SELF-TEST CHECK(S) FAILED\n", g_selftest_failures);
         return 1;
@@ -3203,7 +3372,56 @@ static int run_self_test() {
 
 } // namespace mushaf
 
+namespace mushaf {
+
+// فحص ملف بدايات صفحات طبعة جديدة قبل اعتمادها: يكتب تقريراً بجوار الملف ويعرضه
+static int run_check_edition(const std::wstring& path, bool open_report) {
+    MushafAppWindow app;
+    app.resolve_paths();
+    app.db = std::make_unique<QuranDatabase>(
+        app.assets_dir + L"\\data\\quran.sqlite3",
+        app.assets_dir + L"\\data\\surah_info_egyptian.json"
+    );
+    if (!app.db->is_open()) return 2;
+    EditionCheck c = app.db->check_edition_file(path);
+
+    std::wstring r;
+    r += L"تقرير فحص ملف بدايات الصفحات\r\n";
+    r += L"الملف: " + path + L"\r\n";
+    r += L"الطبعة: " + c.info.name_ar + L" (" + c.info.key + L")\r\n";
+    r += L"عدد الصفحات المقروءة: " + std::to_wstring(c.page_starts.size()) + L"\r\n\r\n";
+    if (c.ok()) {
+        r += L"النتيجة: الملف سليم ويمكن اعتماده. ضعه في مجلد assets\\data\\editions ثم شغّل البرنامج.\r\n";
+    } else {
+        r += L"النتيجة: في الملف " + std::to_wstring(c.errors.size()) + L" خطأ يجب تصحيحه قبل اعتماده:\r\n";
+        for (const auto& e : c.errors) r += L"  - " + e + L"\r\n";
+    }
+    if (!c.warnings.empty()) {
+        r += L"\r\nملاحظات تستحق المراجعة على المصحف الورقي (" + std::to_wstring(c.warnings.size()) + L"):\r\n";
+        for (const auto& w : c.warnings) r += L"  - " + w + L"\r\n";
+    }
+    std::wstring report_path = path + L".تقرير.txt";
+    write_file_utf8(report_path, std::string("\xEF\xBB\xBF") + to_utf8(r));
+    // يفتح التقرير في المفكرة حتى يقرأه المستخدم مباشرة (ويقرؤه قارئ الشاشة)
+    if (open_report) {
+        ShellExecuteW(nullptr, L"open", L"notepad.exe", (L"\"" + report_path + L"\"").c_str(), nullptr, SW_SHOWNORMAL);
+    }
+    return c.ok() ? 0 : 1;
+}
+
+} // namespace mushaf
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdShow) {
+    if (lpCmdLine && std::wcsstr(lpCmdLine, L"--check-edition") != nullptr) {
+        // --quiet: يكتب التقرير دون فتحه (للاختبار الآلي)
+        bool quiet = std::wcsstr(lpCmdLine, L"--quiet") != nullptr;
+        std::wstring arg = std::wcsstr(lpCmdLine, L"--check-edition") + 15;
+        size_t qpos = arg.find(L"--quiet");
+        if (qpos != std::wstring::npos) arg.erase(qpos, 7);
+        while (!arg.empty() && (arg.front() == L' ' || arg.front() == L'"')) arg.erase(arg.begin());
+        while (!arg.empty() && (arg.back() == L' ' || arg.back() == L'"')) arg.pop_back();
+        return mushaf::run_check_edition(arg, !quiet);
+    }
     if (lpCmdLine && std::wcsstr(lpCmdLine, L"--self-test") != nullptr) {
         // إن كان الخرج موجّهاً إلى ملف أو أنبوب نكتب فيه مباشرة، وإلا نلتحق بنافذة الأوامر الأم
         HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -3232,6 +3450,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
         app.assets_dir + L"\\data\\quran.sqlite3",
         app.assets_dir + L"\\data\\surah_info_egyptian.json"
     );
+    // الطبعات الإضافية (مثل دار المعارف) تُقرأ من ملفات بدايات الصفحات إن وُجدت
+    app.db->load_editions_folder(app.assets_dir + L"\\data\\editions");
+    app.settings.mushaf_edition = app.db->set_edition(app.settings.mushaf_edition);
     app.current_surah = app.settings.last_surah;
     app.current_page = app.settings.last_page;
     app.current_juz = app.settings.last_juz;
@@ -3286,6 +3507,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
     app.build_menus();
 
     // 1) الشريط العلوي: «تصفح حسب» فقط، وفي طرفه الآخر سطر يبيّن موضع القراءة الحالي
+    app.lbl_edition = CreateWindowExW(0, L"STATIC", app.tr(L"ال&طبعة:", L"&Print:").c_str(), WS_CHILD | SS_CENTERIMAGE, 16, 13, 62, 26, app.hwnd, nullptr, hInstance, nullptr);
+    app.combo_edition = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_TABSTOP | CBS_DROPDOWNLIST, 82, 10, 220, 320, app.hwnd, (HMENU)mushaf::ID_COMBO_EDITION, hInstance, nullptr);
     app.lbl_browse = CreateWindowExW(0, L"STATIC", app.tr(L"&تصفح حسب:", L"&Browse by:").c_str(), WS_CHILD | WS_VISIBLE | SS_CENTERIMAGE, 16, 13, 100, 26, app.hwnd, nullptr, hInstance, nullptr);
     app.combo_browse = CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, 120, 10, 340, 320, app.hwnd, (HMENU)mushaf::ID_COMBO_BROWSE, hInstance, nullptr);
     app.btn_search = CreateWindowExW(0, L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
@@ -3345,7 +3568,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
         354, 54, 914, 720, app.hwnd, (HMENU)mushaf::ID_LIST_AYAHS, hInstance, nullptr
     );
 
-    for (HWND w : {app.lbl_browse, app.combo_browse, app.btn_search, app.lbl_position,
+    for (HWND w : {app.lbl_edition, app.combo_edition, app.lbl_browse, app.combo_browse, app.btn_search, app.lbl_position,
                    app.edit_sidebar_filter, app.tab_sidebar, app.list_sidebar_index,
                    app.list_sidebar_bookmarks, app.btn_sb_copy_bm, app.btn_sb_del_bm}) {
         SendMessageW(w, WM_SETFONT, (WPARAM)app.font_ui, TRUE);
@@ -3388,7 +3611,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
         if (msg.message == WM_KEYDOWN && msg.wParam == VK_RETURN) {
             HWND foc = GetFocus();
             if (foc) {
-                if (foc == app.combo_browse &&
+                if ((foc == app.combo_browse || foc == app.combo_edition) &&
                     SendMessageW(foc, CB_GETDROPPEDSTATE, 0, 0) == 0) {
                     SetFocus(app.showing_units ? app.list_units : app.list_ayahs);
                     continue;

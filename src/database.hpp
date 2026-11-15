@@ -1,6 +1,8 @@
 #pragma once
 // -*- coding: utf-8 -*-
-// database.hpp — محرك قاعدة البيانات القرآنية بلغة C++ (SQLite3) على طبعة المدينة المنورة (٦٠٤ صفحات).
+// database.hpp — محرك قاعدة البيانات القرآنية بلغة C++ (SQLite3).
+// طبعة المدينة المنورة (٦٠٤ صفحات) مدمجة، وأي طبعة أخرى تُضاف بملف «بدايات الصفحات»
+// في assets\data\editions\ (انظر tools\editions\اقرأني.txt).
 
 #include "utf8_util.hpp"
 #include "../third_party/sqlite3/sqlite3.h"
@@ -68,6 +70,24 @@ struct DivisionRangeInfo {
     std::wstring first_words;
 };
 
+// طبعة مصحف: تختلف الطبعات في تقسيم الصفحات فقط، والنص والأجزاء والأحزاب واحدة
+struct EditionInfo {
+    std::wstring key;        // مثل madinah أو dar_almaarif
+    std::wstring name_ar;    // مثل «طبعة دار المعارف»
+    std::wstring name_en;
+    std::wstring source;     // مسار الملف (فارغ للطبعة المدمجة)
+    int page_count = 0;
+};
+
+// نتيجة فحص ملف بدايات الصفحات
+struct EditionCheck {
+    EditionInfo info;
+    std::vector<int> page_starts;          // رقم أول آية (الترتيب العام) في كل صفحة
+    std::vector<std::wstring> errors;      // أخطاء تمنع اعتماد الملف
+    std::vector<std::wstring> warnings;    // ملاحظات تستحق المراجعة على المصحف الورقي
+    bool ok() const { return errors.empty() && !page_starts.empty(); }
+};
+
 struct SurahHeadingInfo {
     std::wstring type;
     std::wstring excepted_verses;
@@ -84,6 +104,17 @@ public:
     ~QuranDatabase();
 
     bool is_open() const { return db_ != nullptr; }
+
+    // الطبعات: المدينة مدمجة، والباقي من ملفات بدايات الصفحات
+    const std::vector<EditionInfo>& editions() const { return editions_; }
+    const std::wstring& edition() const { return edition_; }
+    const EditionInfo* edition_info(const std::wstring& key) const;
+    std::wstring set_edition(const std::wstring& key);              // يعيد الطبعة المعتمدة فعلاً
+    int load_editions_folder(const std::wstring& folder);           // يعيد عدد الطبعات المضافة
+    EditionCheck check_edition_file(const std::wstring& path) const;
+    EditionCheck check_edition_text(const std::string& utf8_text) const;
+    bool add_edition(const EditionCheck& checked);
+
     int page_count() const;
     int total_ayahs() const { return max_id_; }
 
@@ -131,6 +162,8 @@ private:
     std::map<std::wstring, std::vector<int>> page_first_ids_;
     std::set<int> rub_start_ids_;
     std::map<int, SurahHeadingInfo> headings_map_;
+    std::vector<EditionInfo> editions_;
+    mutable std::vector<int> ayah_text_len_;   // طول نص كل آية، لفحص كمية النص في الصفحة
 
     mutable std::map<std::wstring, std::vector<DivisionRangeInfo>> page_info_cache_;
     mutable std::map<std::wstring, std::vector<DivisionRangeInfo>> juz_info_cache_;
@@ -141,6 +174,7 @@ private:
 
     void load_surahs();
     void apply_page_mapping();
+    int surah_from_text(const std::wstring& token) const;
     void load_headings(const std::wstring& path);
     AyahInfo row_to_ayah(sqlite3_stmt* stmt) const;
     std::vector<DivisionRangeInfo> build_division_list(const char* col_name, int expected_max) const;

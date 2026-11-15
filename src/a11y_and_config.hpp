@@ -250,6 +250,7 @@ inline bool is_valid_browse_scope(const std::wstring& s) {
 
 struct AppSettings {
     std::wstring ui_language = L"ar";       // ar | en
+    std::wstring mushaf_edition = L"madinah"; // madinah أو مفتاح طبعة من assets\data\editions
     std::wstring theme = L"madinah_cream";
     std::wstring quran_font_family = L"KFGQPC HAFS Uthmanic Script";
     int quran_font_size = 26;
@@ -353,6 +354,8 @@ struct AppSettings {
         // كانت طبعة الشمرلي تغيّر الخط تلقائياً إلى «Amiri Quran»؛ بعد إزالتها نعيد خط طبعة المدينة.
         std::wstring legacy_edition;
         get_str("mushaf_edition", legacy_edition);
+        // الشمرلي أُزيلت؛ وأي طبعة غير موجودة تعود إلى المدينة عند تشغيل البرنامج
+        mushaf_edition = (legacy_edition.empty() || legacy_edition == L"shamarly") ? L"madinah" : legacy_edition;
         get_str("theme", theme);
         get_str("quran_font_family", quran_font_family);
         if (legacy_edition == L"shamarly" && quran_font_family == L"Amiri Quran") {
@@ -460,6 +463,7 @@ struct AppSettings {
         std::ostringstream oss;
         oss << "{\n";
         oss << "  \"ui_language\": \"" << json_escape(ui_language) << "\",\n";
+        oss << "  \"mushaf_edition\": \"" << json_escape(mushaf_edition) << "\",\n";
         oss << "  \"theme\": \"" << json_escape(theme) << "\",\n";
         oss << "  \"quran_font_family\": \"" << json_escape(quran_font_family) << "\",\n";
         oss << "  \"quran_font_size\": " << quran_font_size << ",\n";
