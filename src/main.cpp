@@ -86,6 +86,7 @@ enum MenuIds : UINT {
     IDM_JUMP_KHATMAH     = 1112,
     IDM_BOOKMARKS_DLG    = 1113,
     IDM_CLEAR_MARKS      = 1114,
+    IDM_MULTI_COPY       = 1115,
 
     // 3) قائمة الخيارات والعرض
     IDM_OPTIONS          = 1200,
@@ -1721,6 +1722,11 @@ static void show_surah_context_menu(int x, int y, int surah_num, bool with_open,
     AppendMenuW(menu, MF_STRING, IDM_COPY_SURAH_HEAD, g_app->tr(L"نسخ بيان السورة", L"Copy the surah heading").c_str());
     AppendMenuW(menu, MF_STRING, IDM_COPY_SURAH_FULL, g_app->tr(L"نسخ السورة كاملة", L"Copy the whole surah").c_str());
     if (!with_open) {
+        std::wstring sc_mc = g_app->sc(IDM_MULTI_COPY);
+        AppendMenuW(menu, MF_STRING, IDM_MULTI_COPY,
+                    (g_app->tr(L"النسخ المتعدد...", L"Multiple copy...") + (sc_mc.empty() ? L"" : (L"\t" + sc_mc))).c_str());
+    }
+    if (!with_open) {
         AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(menu, MF_STRING, IDM_SURAH_START, g_app->tr(L"الانتقال إلى أول السورة", L"Go to the start of the surah").c_str());
     }
@@ -1752,6 +1758,11 @@ static void show_ayah_context_menu(HWND /*hwnd*/, int x, int y) {
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, IDM_COPY_AYAH,       g_app->tr(L"نسخ\tEnter", L"Copy\tEnter").c_str());
     AppendMenuW(menu, MF_STRING, IDM_COPY_PLAIN,      g_app->tr(L"نسخ بدون تشكيل\tShift+C", L"Copy without diacritics\tShift+C").c_str());
+    {
+        std::wstring sc_mc = g_app->sc(IDM_MULTI_COPY);
+        AppendMenuW(menu, MF_STRING, IDM_MULTI_COPY,
+                    (g_app->tr(L"النسخ المتعدد...", L"Multiple copy...") + (sc_mc.empty() ? L"" : (L"\t" + sc_mc))).c_str());
+    }
     if (!g_app->marked_ids.empty()) {
         AppendMenuW(menu, MF_STRING, IDM_CLEAR_MARKS, g_app->tr(L"إلغاء التظليل", L"Clear highlighting").c_str());
     }
@@ -2378,6 +2389,18 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         case IDM_PREV_UNIT:        g_app->navigate_unit(-1); return 0;
         case IDM_COPY_AYAH:        g_app->copy_current_ayah(false); return 0;
         case IDM_CLEAR_MARKS:      g_app->clear_marks(); return 0;
+        case IDM_MULTI_COPY: {
+            // آيات الوحدة المعروضة (سورة أو صفحة أو جزء...) في قائمة بمربعات اختيار
+            if (g_app->current_ayahs.empty()) return 0;
+            if (g_app->showing_units) g_app->show_ayahs_view();
+            const AyahInfo* fa = g_app->focused_ayah();
+            show_multi_copy_dialog(hwnd, *g_app->db, g_app->settings, g_app->current_ayahs, g_app->marked_ids,
+                                   fa ? fa->id : 0, g_app->is_en(), g_app->font_ui, g_app->font_units,
+                                   &ScreenReaderEngine::instance());
+            g_app->on_marks_changed();
+            SetFocus(g_app->list_ayahs);
+            return 0;
+        }
         case IDM_COPY_PLAIN:       g_app->copy_current_ayah(true); return 0;
         case IDM_TOGGLE_BOOKMARK:  g_app->toggle_bookmark_at_current(); return 0;
         case IDM_SET_KHATMAH:      g_app->set_khatmah_at_current(); return 0;
@@ -2874,6 +2897,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"Applications key or Shift+F10 on a surah heading or in the surah list: surah menu (surah information, copy heading, copy whole surah)");
                 lines.push_back(L"Enter / Ctrl+C / F8: Copy current ayah to clipboard");
                 lines.push_back(L"Shift+C: Copy current ayah as plain text without diacritics");
+                lines.push_back(L"Ctrl+Alt+C: Multiple copy — the current unit's ayahs with checkboxes; Space selects, Enter copies");
                 lines.push_back(L"Mouse: drag over ayahs to highlight them (each drag adds to the highlight, Ctrl+click toggles one ayah); Copy then copies all highlighted ayahs");
                 lines.push_back(L"M / Ctrl+M: Set Reading Stop Mark (Khatmah) at current ayah");
                 lines.push_back(L"B: Add or remove current ayah from bookmarks");
@@ -2886,6 +2910,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"زر التطبيقات أو Shift+F10 على عنوان السورة أو في فهرس السور: قائمة السورة (معلومات السورة، ونسخ بيانها، ونسخها كاملة)");
                 lines.push_back(L"Enter أو Ctrl+C أو F8: نسخ الآية الحالية إلى الحافظة");
                 lines.push_back(L"Shift+C: نسخ الآية الحالية بنص إملائي مجرد بدون تشكيل");
+                lines.push_back(L"Ctrl+Alt+C: النسخ المتعدد — آيات الوحدة الحالية بمربعات اختيار، المسافة للتحديد و Enter للنسخ");
                 lines.push_back(L"بالفأرة: اسحب على الآيات لتظليلها (كل سحب يضيف إلى التظليل السابق، و Ctrl مع النقر يظلل آية واحدة أو يلغيها)، ثم «نسخ» ينسخ كل المظلل");
                 lines.push_back(L"M أو Ctrl+M: وضع فاصل الختمة (علامة التوقف للقراءة) عند الآية الحالية");
                 lines.push_back(L"B: إضافة أو إزالة الآية الحالية من المفضلة");

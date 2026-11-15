@@ -41,6 +41,7 @@ inline const std::vector<ShortcutDef>& shortcut_defs() {
         {L"jump_khatmah",    1112, L"الانتقال لفاصل الختمة",       L"Jump to Reading Bookmark",    L"Alt+M"},
         {L"ayah_info",       1104, L"تفاصيل وإحصائيات الآية",      L"Ayah Info & Statistics",      L"Ctrl+I"},
         {L"surah_info",      1105, L"تفاصيل وإحصائيات السورة",     L"Surah Info & Statistics",     L"Ctrl+Shift+I"},
+        {L"multi_copy",      1115, L"النسخ المتعدد",               L"Multiple Copy",               L"Ctrl+Alt+C"},
         {L"copy_all",        1103, L"نسخ الوحدة الحالية كاملة",    L"Copy Entire Current Unit",    L"Ctrl+Shift+A"},
         {L"options",         1200, L"نافذة الخيارات",              L"Options Dialog",              L"Ctrl+O"},
         {L"cycle_theme",     1234, L"تبديل المظهر اللوني",         L"Cycle Color Theme",           L"Ctrl+T"},

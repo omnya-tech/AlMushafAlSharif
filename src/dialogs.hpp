@@ -13,6 +13,7 @@
 #include <vector>
 #include <functional>
 #include <algorithm>
+#include <set>
 
 #include "database.hpp"
 #include "sajdah_and_formatter.hpp"
@@ -1918,6 +1919,242 @@ inline bool show_sajdah_navigator_dialog(
     SetForegroundWindow(parent);
     if (st.accepted) out_verse_key = st.selected_verse_key;
     return st.accepted;
+}
+
+
+// ============================================================================
+// نافذة «النسخ المتعدد» (Ctrl+Alt+C): آيات الوحدة الحالية في قائمة بمربعات اختيار.
+// المسافة تحدد الآية أو تلغيها، و Enter ينسخ المحدد بترتيب المصحف.
+// التحديد هنا هو نفسه تظليل الآيات في المصحف، فما ظلّله المبصر بالفأرة يظهر محدداً.
+// ============================================================================
+struct MultiCopyState {
+    QuranDatabase* db = nullptr;
+    AppSettings* settings = nullptr;
+    ScreenReaderEngine* sr = nullptr;
+    bool is_en = false;
+    HWND list = nullptr;
+    HWND lbl_count = nullptr;
+    std::vector<AyahInfo> ayahs;
+    std::vector<char> final_checked;   // حالة المربعات لحظة إغلاق النافذة
+    bool copied = false;
+};
+
+inline std::wstring multi_copy_count_text(int n, bool is_en) {
+    if (is_en) return std::to_wstring(n) + (n == 1 ? L" ayah selected" : L" ayahs selected");
+    if (n == 0) return L"لم تُحدَّد أي آية";
+    if (n == 1) return L"آية واحدة محددة";
+    if (n == 2) return L"آيتان محددتان";
+    if (n <= 10) return to_arabic_digits(n) + L" آيات محددة";
+    return to_arabic_digits(n) + L" آية محددة";
+}
+
+inline int multi_copy_checked_count(MultiCopyState* st) {
+    int n = 0;
+    for (int i = 0; i < (int)st->ayahs.size(); ++i) {
+        if (ListView_GetCheckState(st->list, i)) ++n;
+    }
+    return n;
+}
+
+inline void multi_copy_update_count(MultiCopyState* st) {
+    if (st->lbl_count) SetWindowTextW(st->lbl_count, multi_copy_count_text(multi_copy_checked_count(st), st->is_en).c_str());
+}
+
+inline void multi_copy_check_all(MultiCopyState* st, bool on) {
+    for (int i = 0; i < (int)st->ayahs.size(); ++i) ListView_SetCheckState(st->list, i, on ? TRUE : FALSE);
+    multi_copy_update_count(st);
+    if (st->sr) {
+        st->sr->speak(on ? (st->is_en ? L"All ayahs selected" : L"تم تحديد كل الآيات")
+                         : (st->is_en ? L"Selection cleared" : L"تم إلغاء تحديد كل الآيات"), true, st->settings->sapi_fallback);
+    }
+}
+
+inline void multi_copy_do_copy(HWND dlg, MultiCopyState* st) {
+    std::wstring all;
+    int n = 0;
+    for (int i = 0; i < (int)st->ayahs.size(); ++i) {   // القائمة مرتبة أصلاً بترتيب المصحف
+        if (!ListView_GetCheckState(st->list, i)) continue;
+        if (n++ > 0) all += L"\r\n";
+        all += format_ayah_custom(st->ayahs[i], st->settings->copy_script, st->settings->copy_brackets,
+                                  st->settings->copy_reference, st->settings->copy_arabic_digits);
+    }
+    if (n == 0) {
+        if (st->sr) st->sr->speak(st->is_en ? L"No ayah is selected. Press Space on an ayah to select it."
+                                            : L"لم تحدد أي آية. اضغط المسافة على الآية لتحديدها.", true, st->settings->sapi_fallback);
+        return;
+    }
+    set_clipboard_text(dlg, all);
+    st->copied = true;
+    if (st->sr) {
+        std::wstring msg = st->is_en ? (L"Copied " + std::to_wstring(n) + (n == 1 ? L" ayah" : L" ayahs"))
+                       : (n == 1 ? L"تم نسخ آية واحدة" : n == 2 ? L"تم نسخ آيتين"
+                          : n <= 10 ? (L"تم نسخ " + std::to_wstring(n) + L" آيات") : (L"تم نسخ " + std::to_wstring(n) + L" آية"));
+        st->sr->speak(msg, true, st->settings->sapi_fallback);
+    }
+    DestroyWindow(dlg);
+}
+
+static LRESULT CALLBACK MultiCopyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    auto* st = reinterpret_cast<MultiCopyState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    switch (msg) {
+    case WM_NOTIFY: {
+        auto* nm = reinterpret_cast<NMHDR*>(lParam);
+        if (st && nm && nm->idFrom == 800 && nm->code == LVN_ITEMCHANGED) {
+            auto* lv = reinterpret_cast<NMLISTVIEW*>(lParam);
+            if (lv->uChanged & LVIF_STATE) multi_copy_update_count(st);
+        }
+        break;
+    }
+    case WM_COMMAND: {
+        if (!st) break;
+        UINT id = LOWORD(wParam);
+        if (id == IDOK || id == 801) { multi_copy_do_copy(hwnd, st); return 0; }
+        if (id == 802) { multi_copy_check_all(st, true); return 0; }
+        if (id == 803) { multi_copy_check_all(st, false); return 0; }
+        if (id == IDCANCEL) { DestroyWindow(hwnd); return 0; }
+        break;
+    }
+    case WM_DESTROY:
+        // تصل هذه الرسالة إلى النافذة قبل أبنائها، فالقائمة ما زالت موجودة
+        if (st && st->list) {
+            st->final_checked.assign(st->ayahs.size(), 0);
+            for (int i = 0; i < (int)st->ayahs.size(); ++i) {
+                st->final_checked[i] = ListView_GetCheckState(st->list, i) ? 1 : 0;
+            }
+        }
+        return 0;
+    case WM_CLOSE:
+        DestroyWindow(hwnd);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+// يعرض النافذة ويحدّث marked_ids بما حُدد فيها؛ يعيد true إن تم النسخ
+inline bool show_multi_copy_dialog(
+    HWND parent,
+    QuranDatabase& db,
+    AppSettings& settings,
+    const std::vector<AyahInfo>& ayahs,
+    std::set<int>& marked_ids,
+    int focus_ayah_id,
+    bool is_en,
+    HFONT ui_font,
+    HFONT list_font,
+    ScreenReaderEngine* sr
+) {
+    static bool reg = false;
+    if (!reg) {
+        WNDCLASSEXW wc{};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = MultiCopyWndProc;
+        wc.hInstance = GetModuleHandleW(nullptr);
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+        wc.lpszClassName = L"MushafMultiCopyDlg";
+        RegisterClassExW(&wc);
+        reg = true;
+    }
+    if (ayahs.empty()) return false;
+
+    MultiCopyState st;
+    st.db = &db;
+    st.settings = &settings;
+    st.sr = sr;
+    st.is_en = is_en;
+    st.ayahs = ayahs;
+
+    bool multi_surah = ayahs.front().surah_number != ayahs.back().surah_number;
+    std::wstring title = is_en ? (L"Multiple Copy (Ctrl+Alt+C)")
+                               : (L"النسخ المتعدد (Ctrl+Alt+C)");
+
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    DWORD ex_style = WS_EX_DLGMODALFRAME | (is_en ? 0 : (WS_EX_LAYOUTRTL | WS_EX_RTLREADING));
+    HWND dlg = CreateWindowExW(
+        ex_style, L"MushafMultiCopyDlg", title.c_str(),
+        WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+        150, 80, 820, 600, parent, nullptr, hInst, nullptr
+    );
+    SetWindowLongPtrW(dlg, GWLP_USERDATA, (LONG_PTR)&st);
+
+    HWND lbl = CreateWindowExW(0, L"STATIC",
+        is_en ? L"Press Space to select or unselect an ayah, then Enter to copy the selected ayahs:"
+              : L"اضغط المسافة لتحديد الآية أو إلغاء تحديدها، ثم Enter لنسخ الآيات المحددة:",
+        WS_CHILD | WS_VISIBLE, 16, 14, 772, 24, dlg, nullptr, hInst, nullptr);
+
+    st.list = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
+        16, 44, 772, 410, dlg, (HMENU)800, hInst, nullptr);
+    ListView_SetExtendedListViewStyle(st.list, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    SendMessageW(st.list, WM_SETFONT, (WPARAM)(list_font ? list_font : ui_font), TRUE);
+
+    RECT lrc;
+    GetClientRect(st.list, &lrc);
+    LVCOLUMNW col{};
+    col.mask = LVCF_WIDTH;
+    col.cx = (lrc.right - lrc.left) - GetSystemMetrics(SM_CXVSCROLL) - 4;
+    ListView_InsertColumn(st.list, 0, &col);
+
+    int focus_idx = 0;
+    for (int i = 0; i < (int)ayahs.size(); ++i) {
+        const AyahInfo& a = ayahs[i];
+        // نص الآية أولاً ثم رقمها (واسم السورة إن تعددت السور في الوحدة)
+        std::wstring where = multi_surah
+            ? (is_en ? (a.surah_name + L" " + std::to_wstring(a.ayah_number)) : (L"سورة " + a.surah_name + L"، الآية " + to_arabic_digits(a.ayah_number)))
+            : (is_en ? (L"ayah " + std::to_wstring(a.ayah_number)) : (L"الآية " + to_arabic_digits(a.ayah_number)));
+        std::wstring text = a.text_uthmani + L" — " + where;
+        LVITEMW it{};
+        it.mask = LVIF_TEXT;
+        it.iItem = i;
+        it.pszText = const_cast<wchar_t*>(text.c_str());
+        ListView_InsertItem(st.list, &it);
+        if (marked_ids.count(a.id)) ListView_SetCheckState(st.list, i, TRUE);
+        if (a.id == focus_ayah_id) focus_idx = i;
+    }
+    ListView_SetItemState(st.list, focus_idx, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED);
+    ListView_EnsureVisible(st.list, focus_idx, FALSE);
+
+    st.lbl_count = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 16, 464, 772, 24, dlg, nullptr, hInst, nullptr);
+    multi_copy_update_count(&st);
+
+    HWND btn_copy = CreateWindowExW(0, L"BUTTON", is_en ? L"Copy (Enter)" : L"نسخ (Enter)",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 16, 500, 170, 34, dlg, (HMENU)801, hInst, nullptr);
+    HWND btn_all = CreateWindowExW(0, L"BUTTON", is_en ? L"Select all (Ctrl+A)" : L"تحديد الكل (Ctrl+A)",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 196, 500, 190, 34, dlg, (HMENU)802, hInst, nullptr);
+    HWND btn_none = CreateWindowExW(0, L"BUTTON", is_en ? L"Clear selection" : L"إلغاء التحديد",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 396, 500, 170, 34, dlg, (HMENU)803, hInst, nullptr);
+    HWND btn_close = CreateWindowExW(0, L"BUTTON", is_en ? L"Close (Esc)" : L"إغلاق (Esc)",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 618, 500, 170, 34, dlg, (HMENU)IDCANCEL, hInst, nullptr);
+    for (HWND h : {lbl, st.lbl_count, btn_copy, btn_all, btn_none, btn_close}) {
+        SendMessageW(h, WM_SETFONT, (WPARAM)ui_font, TRUE);
+    }
+
+    EnableWindow(parent, FALSE);
+    SetFocus(st.list);
+
+    MSG msg;
+    while (IsWindow(dlg) && GetMessageW(&msg, nullptr, 0, 0)) {
+        // Ctrl+A داخل القائمة يحدد كل الآيات
+        if (msg.message == WM_KEYDOWN && msg.wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000) &&
+            (msg.hwnd == st.list || IsChild(dlg, msg.hwnd))) {
+            multi_copy_check_all(&st, true);
+            continue;
+        }
+        if (handle_enter_on_focused_button(dlg, msg)) continue;
+        if (!IsDialogMessageW(dlg, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+    EnableWindow(parent, TRUE);
+    SetForegroundWindow(parent);
+
+    // ما حُدد في النافذة يصبح هو التظليل في المصحف لهذه الآيات
+    for (size_t i = 0; i < st.final_checked.size() && i < st.ayahs.size(); ++i) {
+        if (st.final_checked[i]) marked_ids.insert(st.ayahs[i].id);
+        else marked_ids.erase(st.ayahs[i].id);
+    }
+    return st.copied;
 }
 
 } // namespace mushaf
