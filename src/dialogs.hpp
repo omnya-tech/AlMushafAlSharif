@@ -513,9 +513,9 @@ static LRESULT CALLBACK ShortcutCaptureProc(HWND hwnd, UINT msg, WPARAM wParam, 
 
 static void update_options_copy_preview(OptionsDlgState* st) {
     if (!st || !st->lbl_preview) return;
-    static const wchar_t* scripts[4] = {L"uthmani", L"qpc", L"imlaei", L"plain"};
+    static const wchar_t* scripts[3] = {L"uthmani", L"qpc", L"imlaei"};
     int s_idx = (int)SendMessageW(st->combo_copy_script, CB_GETCURSEL, 0, 0);
-    std::wstring script = (s_idx >= 0 && s_idx < 4) ? scripts[s_idx] : L"uthmani";
+    std::wstring script = (s_idx >= 0 && s_idx < 3) ? scripts[s_idx] : L"uthmani";
     bool brackets = (SendMessageW(st->chk_brackets, BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool reference = (SendMessageW(st->chk_reference, BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool ar_digits = (SendMessageW(st->chk_arabic_digits, BM_GETCHECK, 0, 0) == BST_CHECKED);
@@ -526,7 +526,7 @@ static void update_options_copy_preview(OptionsDlgState* st) {
     } else {
         std::wstring core = (script == L"uthmani" || script == L"qpc")
             ? L"ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ"
-            : (script == L"imlaei" ? L"الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ" : L"الحمد لله رب العالمين");
+            : L"الْحَمْدُ لِلَّهِ رَبِّ الْعَالَمِينَ";
         std::wstring body = brackets ? (L"﴿ " + core + L" ﴾") : core;
         std::wstring d = ar_digits ? L"٢" : L"2";
         txt = reference ? (body + L" [الفاتحة: " + d + L"]") : body;
@@ -615,9 +615,9 @@ static LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             int sf = (int)SendMessageW(st->combo_startup_focus, CB_GETCURSEL, 0, 0);
             st->settings->startup_focus = (sf >= 0 && sf < 3) ? start_keys[sf] : L"surah_index";
 
-            static const wchar_t* scripts[4] = {L"uthmani", L"qpc", L"imlaei", L"plain"};
+            static const wchar_t* scripts[3] = {L"uthmani", L"qpc", L"imlaei"};
             int cs = (int)SendMessageW(st->combo_copy_script, CB_GETCURSEL, 0, 0);
-            st->settings->copy_script = (cs >= 0 && cs < 4) ? scripts[cs] : L"uthmani";
+            st->settings->copy_script = (cs >= 0 && cs < 3) ? scripts[cs] : L"uthmani";
             st->settings->copy_brackets = (SendMessageW(st->chk_brackets, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->copy_reference = (SendMessageW(st->chk_reference, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->copy_arabic_digits = (SendMessageW(st->chk_arabic_digits, BM_GETCHECK, 0, 0) == BST_CHECKED);
@@ -770,11 +770,12 @@ inline bool show_options_dialog(
 
     add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Copied script:" : L"نوع رسم الآية عند النسخ:", WS_CHILD | WS_VISIBLE, 32, 242, 210, 26, dlg, nullptr, hInst, nullptr));
     st.combo_copy_script = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, 250, 238, 430, 200, dlg, (HMENU)610, hInst, nullptr));
-    const wchar_t* cs_ar[4] = {L"الرسم العثماني المشكول (مصحف المدينة)", L"رسم حفص (مجمع الملك فهد)", L"الرسم الإملائي المشكول", L"نص إملائي مجرد بدون تشكيل"};
-    const wchar_t* cs_en[4] = {L"Uthmani script with diacritics", L"King Fahd Complex Hafs script", L"Standard Arabic with diacritics", L"Plain Arabic without diacritics"};
-    const wchar_t* cs_keys[4] = {L"uthmani", L"qpc", L"imlaei", L"plain"};
+    // النص القرآني يُنسخ مشكولاً دائماً
+    const wchar_t* cs_ar[3] = {L"الرسم العثماني المشكول (مصحف المدينة)", L"رسم حفص (مجمع الملك فهد)", L"الرسم الإملائي المشكول"};
+    const wchar_t* cs_en[3] = {L"Uthmani script with diacritics", L"King Fahd Complex Hafs script", L"Standard Arabic with diacritics"};
+    const wchar_t* cs_keys[3] = {L"uthmani", L"qpc", L"imlaei"};
     int cs_sel = 0;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 3; ++i) {
         SendMessageW(st.combo_copy_script, CB_ADDSTRING, 0, (LPARAM)(is_en ? cs_en[i] : cs_ar[i]));
         if (settings.copy_script == cs_keys[i]) cs_sel = i;
     }

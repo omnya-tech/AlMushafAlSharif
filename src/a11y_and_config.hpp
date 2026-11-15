@@ -363,6 +363,8 @@ struct AppSettings {
         }
         get_int("quran_font_size", quran_font_size);
         get_str("copy_script", copy_script);
+        // أُزيل النسخ بلا تشكيل: من اختاره سابقاً يُنسخ له الرسم الإملائي المشكول
+        if (copy_script != L"uthmani" && copy_script != L"qpc" && copy_script != L"imlaei") copy_script = L"imlaei";
         get_bool("copy_brackets", copy_brackets);
         get_bool("copy_reference", copy_reference);
         get_bool("copy_arabic_digits", copy_arabic_digits);

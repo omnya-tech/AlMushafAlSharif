@@ -37,8 +37,9 @@ constexpr int kToolbarHeight  = 52;
 constexpr UINT_PTR kRelayoutTimer = 1;
 // سهما التقليب للمبصر على جانبي صفحة المصحف: يُرسمان على خلفية النافذة دون أي عنصر تحكم،
 // فلا يراهما قارئ الشاشة ولا يدخلان في التنقل بلوحة المفاتيح.
-constexpr int kArrowGutter = 56;
-constexpr int kArrowDiameter = 42;
+constexpr int kArrowGutter = 46;
+constexpr int kArrowDiameter = 34;
+constexpr int kArrowMinWindow = 900;   // أضيق من هذا يُخفى السهمان ويأخذ النص العرض كله
 
 enum MenuIds : UINT {
     ID_COMBO_BROWSE           = 102,
@@ -869,6 +870,40 @@ public:
         }
     }
 
+    // العدد الترتيبي بالعربية (مذكر): الأول، الثاني... الحادي والعشرون... الستون
+    static std::wstring ordinal_ar(int n) {
+        static const wchar_t* u[] = {L"", L"الأول", L"الثاني", L"الثالث", L"الرابع", L"الخامس",
+                                     L"السادس", L"السابع", L"الثامن", L"التاسع", L"العاشر"};
+        static const wchar_t* uc[] = {L"", L"الحادي", L"الثاني", L"الثالث", L"الرابع", L"الخامس",
+                                      L"السادس", L"السابع", L"الثامن", L"التاسع"};
+        static const wchar_t* t[] = {L"", L"", L"العشرون", L"الثلاثون", L"الأربعون", L"الخمسون",
+                                     L"الستون", L"السبعون", L"الثمانون", L"التسعون"};
+        if (n >= 1 && n <= 10) return u[n];
+        if (n >= 11 && n <= 19) return std::wstring(uc[n - 10]) + L" عشر";
+        if (n >= 20 && n <= 99) {
+            if (n % 10 == 0) return t[n / 10];
+            return std::wstring(uc[n % 10]) + L" و" + t[n / 10];   // «الحادي والعشرون»
+        }
+        return to_arabic_digits(n);
+    }
+
+    // خط مجمع الملك فهد يرسم الأرقام العربية (١٢٣) زخارفَ لنهاية الآية، فالأرقام في البيانات
+    // الملحقة بالآية تُكتب بالكلمات (الجزء الثالث) أو بالأرقام الغربية حتى لا تُشبه أرقام الآيات
+    static std::wstring ordinals_for_quran_font(const std::wstring& s) {
+        std::wstring out;
+        size_t i = 0;
+        while (i < s.size()) {
+            if (s[i] >= 0x0660 && s[i] <= 0x0669) {
+                int v = 0;
+                while (i < s.size() && s[i] >= 0x0660 && s[i] <= 0x0669) { v = v * 10 + (s[i] - 0x0660); ++i; }
+                out += ordinal_ar(v);
+            } else {
+                out.push_back(s[i++]);
+            }
+        }
+        return out;
+    }
+
     std::wstring format_visual_ayah(const AyahInfo& a) const {
         bool is_kfgqpc = settings.quran_font_family.find(L"KFGQPC") != std::wstring::npos;
         bool with_num = (settings.ayah_display == L"text_number" || settings.ayah_display == L"text_number_surah");
@@ -891,11 +926,13 @@ public:
         if (sp) {
             if (text.find(L"۩") == std::wstring::npos) text += L" ۩";
             if (!sp->is_agreed() || a.verse_key == L"41:37" || a.verse_key == L"41:38") {
-                text += L"  [" + sajdah_short_label(a.verse_key, is_en()) + L"]";
+                std::wstring lbl = sajdah_short_label(a.verse_key, is_en());
+                text += L"  [" + (is_kfgqpc ? to_western_digits(lbl) : lbl) + L"]";
             }
         }
         if (is_rub) {
             std::wstring badge = division_badge_text(a, is_en());
+            if (is_kfgqpc && !is_en()) badge = ordinals_for_quran_font(badge);
             if (!badge.empty()) text += L"  " + badge;
         }
         if (settings.ayah_display == L"text_number_surah") {
@@ -910,7 +947,7 @@ public:
         if (settings.show_ayah_letter_count) {
             int lcnt = count_arabic_letters(a.text_simple);
             text += is_en() ? (L"  [" + std::to_wstring(lcnt) + L" letters]")
-                            : (L"  〔" + to_arabic_digits(lcnt) + L" حرفاً〕");
+                            : (L"  〔" + (is_kfgqpc ? std::to_wstring(lcnt) : to_arabic_digits(lcnt)) + L" حرفاً〕");
         }
         return text;
     }
@@ -1791,8 +1828,10 @@ public:
 
         // هامشان على جانبي صفحة المصحف لسهمي التقليب
         invalidate_nav_arrows();
-        int page_x = main_x + kArrowGutter;
-        int page_w = std::max(200, main_w - 2 * kArrowGutter);
+        const bool arrows_on = width >= kArrowMinWindow;
+        const int gutter = arrows_on ? kArrowGutter : 0;
+        int page_x = main_x + gutter;
+        int page_w = std::max(200, main_w - 2 * gutter);
         int cy = list_y + list_h / 2;
         int r = kArrowDiameter / 2;
         RECT logical_left = {main_x + kArrowGutter / 2 - r, cy - r, main_x + kArrowGutter / 2 + r, cy + r};
@@ -1801,6 +1840,10 @@ public:
         bool rtl = (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) != 0;
         arrow_rect_next = rtl ? logical_right : logical_left;
         arrow_rect_prev = rtl ? logical_left : logical_right;
+        if (!arrows_on) {
+            SetRectEmpty(&arrow_rect_next);
+            SetRectEmpty(&arrow_rect_prev);
+        }
         invalidate_nav_arrows();
 
         MoveWindow(list_units, page_x, list_y, page_w, list_h, TRUE);
@@ -1880,7 +1923,6 @@ static void show_ayah_context_menu(HWND /*hwnd*/, int x, int y) {
     bool in_bm = std::find(g_app->settings.bookmarks.begin(), g_app->settings.bookmarks.end(), a->verse_key) != g_app->settings.bookmarks.end();
     HMENU menu = CreatePopupMenu();
     AppendMenuW(menu, MF_STRING, IDM_COPY_AYAH,       g_app->tr(L"نسخ\tEnter", L"Copy\tEnter").c_str());
-    AppendMenuW(menu, MF_STRING, IDM_COPY_PLAIN,      g_app->tr(L"نسخ بدون تشكيل\tShift+C", L"Copy without diacritics\tShift+C").c_str());
     {
         std::wstring sc_mc = g_app->sc(IDM_MULTI_COPY);
         AppendMenuW(menu, MF_STRING, IDM_MULTI_COPY,
@@ -2025,10 +2067,6 @@ static LRESULT CALLBACK AyahListSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
         }
         if (wParam == VK_RETURN || wParam == VK_F8 || (wParam == 'C' && (ctrl || alt || !shift))) {
             g_app->copy_current_ayah(false);
-            return 0;
-        }
-        if (wParam == 'C' && shift && !ctrl && !alt) {
-            g_app->copy_current_ayah(true);
             return 0;
         }
         if (wParam == 'B' && !ctrl && !alt) {
@@ -2536,7 +2574,6 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             SetFocus(g_app->list_ayahs);
             return 0;
         }
-        case IDM_COPY_PLAIN:       g_app->copy_current_ayah(true); return 0;
         case IDM_TOGGLE_BOOKMARK:  g_app->toggle_bookmark_at_current(); return 0;
         case IDM_SET_KHATMAH:      g_app->set_khatmah_at_current(); return 0;
         case IDM_JUMP_KHATMAH:
@@ -3036,7 +3073,6 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"Applications key or Shift+F10 on an ayah: ayah menu (copy, ayah information, bookmark, reading mark)");
                 lines.push_back(L"Applications key or Shift+F10 on a surah heading or in the surah list: surah menu (surah information, copy heading, copy whole surah)");
                 lines.push_back(L"Enter / Ctrl+C / F8: Copy current ayah to clipboard");
-                lines.push_back(L"Shift+C: Copy current ayah as plain text without diacritics");
                 lines.push_back(L"Ctrl+Alt+C: Multiple copy — the current unit's ayahs with checkboxes; Space selects, Enter copies");
                 lines.push_back(L"Mouse: drag over ayahs to highlight them (each drag adds to the highlight, Ctrl+click toggles one ayah); Copy then copies all highlighted ayahs");
                 lines.push_back(L"M / Ctrl+M: Set Reading Stop Mark (Khatmah) at current ayah");
@@ -3049,7 +3085,6 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"زر التطبيقات أو Shift+F10 على الآية: قائمة الآية (النسخ، ومعلومات الآية، والمفضلة، وفاصل الختمة)");
                 lines.push_back(L"زر التطبيقات أو Shift+F10 على عنوان السورة أو في فهرس السور: قائمة السورة (معلومات السورة، ونسخ بيانها، ونسخها كاملة)");
                 lines.push_back(L"Enter أو Ctrl+C أو F8: نسخ الآية الحالية إلى الحافظة");
-                lines.push_back(L"Shift+C: نسخ الآية الحالية بنص إملائي مجرد بدون تشكيل");
                 lines.push_back(L"Ctrl+Alt+C: النسخ المتعدد — آيات الوحدة الحالية بمربعات اختيار، المسافة للتحديد و Enter للنسخ");
                 lines.push_back(L"بالفأرة: اسحب على الآيات لتظليلها (كل سحب يضيف إلى التظليل السابق، و Ctrl مع النقر يظلل آية واحدة أو يلغيها)، ثم «نسخ» ينسخ كل المظلل");
                 lines.push_back(L"M أو Ctrl+M: وضع فاصل الختمة (علامة التوقف للقراءة) عند الآية الحالية");
@@ -3271,6 +3306,14 @@ static int run_self_test() {
         SELFTEST_CHECK(!is_screen_reader_safe_shortcut(FVIRTKEY, 'A', rar, ren));
         SELFTEST_CHECK(!is_screen_reader_safe_shortcut(FVIRTKEY | FCONTROL, VK_INSERT, rar, ren));
     }
+
+    // الأعداد الترتيبية في بيانات الأرباع مع خط مجمع الملك فهد
+    SELFTEST_CHECK(MushafAppWindow::ordinal_ar(1) == L"الأول");
+    SELFTEST_CHECK(MushafAppWindow::ordinal_ar(11) == L"الحادي عشر");
+    SELFTEST_CHECK(MushafAppWindow::ordinal_ar(21) == L"الحادي والعشرون");
+    SELFTEST_CHECK(MushafAppWindow::ordinal_ar(30) == L"الثلاثون");
+    SELFTEST_CHECK(MushafAppWindow::ordinal_ar(58) == L"الثامن والخمسون");
+    SELFTEST_CHECK(MushafAppWindow::ordinals_for_quran_font(L"[۞ الحزب ٢ • الجزء ١]") == L"[۞ الحزب الثاني • الجزء الأول]");
 
     // الإعدادات: أوضاع التصفح السبعة مقبولة، وأي قيمة غريبة مرفوضة
     for (const wchar_t* s : {L"surah", L"page", L"juz", L"hizb", L"rub", L"manzil", L"ruku"}) {
