@@ -22,6 +22,17 @@
 
 namespace mushaf {
 
+// إغلاق نافذة فرعية: نعيد تفعيل النافذة الرئيسية قبل الإغلاق، وإلا أعطى ويندوز التركيز
+// لبرنامج آخر لحظة اختفاء النافذة (لأن الرئيسية تكون معطلة)، فيضيع موضع قارئ الشاشة.
+inline void close_modal(HWND dlg) {
+    if (!dlg || !IsWindow(dlg)) return;
+    if (HWND owner = GetWindow(dlg, GW_OWNER)) {
+        EnableWindow(owner, TRUE);
+        SetActiveWindow(owner);
+    }
+    DestroyWindow(dlg);
+}
+
 // ----------------------------------------------------------------------------
 // صفحات التبويب مع مظهر ويندوز الحديث (Common Controls 6)
 // ----------------------------------------------------------------------------
@@ -250,7 +261,7 @@ static LRESULT CALLBACK LineReaderWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
     case WM_COMMAND: {
         UINT id = LOWORD(wParam);
         if (id == IDOK || id == IDCANCEL) {
-            DestroyWindow(hwnd);
+            close_modal(hwnd);
             return 0;
         }
         if (id == 201 && st) { // نسخ السطر الحالي
@@ -274,7 +285,7 @@ static LRESULT CALLBACK LineReaderWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
         break;
     }
     case WM_CLOSE:
-        DestroyWindow(hwnd);
+        close_modal(hwnd);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -653,17 +664,17 @@ static LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
 
             st->settings->save();
             st->accepted = true;
-            DestroyWindow(hwnd);
+            close_modal(hwnd);
             return 0;
         }
         if (id == IDCANCEL) {
-            DestroyWindow(hwnd);
+            close_modal(hwnd);
             return 0;
         }
         break;
     }
     case WM_CLOSE:
-        DestroyWindow(hwnd);
+        close_modal(hwnd);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -969,37 +980,37 @@ static void accept_goto_action(HWND dlg, GoToDlgState* st, UINT cmd_id) {
         st->res.surah = s;
         st->res.value = read_clamped(st->edit_ayah, 1, max_a);
         st->res.accepted = true;
-        DestroyWindow(dlg);
+        close_modal(dlg);
     } else if (cmd_id == 322) { // صفحة
         st->res.mode = L"page";
         st->res.value = read_clamped(st->edit_page, 1, st->page_count);
         st->res.accepted = true;
-        DestroyWindow(dlg);
+        close_modal(dlg);
     } else if (cmd_id == 323) { // جزء
         st->res.mode = L"juz";
         st->res.value = read_clamped(st->edit_juz, 1, 30);
         st->res.accepted = true;
-        DestroyWindow(dlg);
+        close_modal(dlg);
     } else if (cmd_id == 324) { // ربع
         st->res.mode = L"rub";
         st->res.value = read_clamped(st->edit_rub, 1, 240);
         st->res.accepted = true;
-        DestroyWindow(dlg);
+        close_modal(dlg);
     } else if (cmd_id == 325) { // حزب
         st->res.mode = L"hizb";
         st->res.value = read_clamped(st->edit_hizb, 1, 60);
         st->res.accepted = true;
-        DestroyWindow(dlg);
+        close_modal(dlg);
     } else if (cmd_id == 326) { // منزلة
         st->res.mode = L"manzil";
         st->res.value = read_clamped(st->edit_manzil, 1, 7);
         st->res.accepted = true;
-        DestroyWindow(dlg);
+        close_modal(dlg);
     } else if (cmd_id == 327) { // ركوع
         st->res.mode = L"ruku";
         st->res.value = read_clamped(st->edit_ruku, 1, 558);
         st->res.accepted = true;
-        DestroyWindow(dlg);
+        close_modal(dlg);
     }
 }
 
@@ -1050,13 +1061,13 @@ static LRESULT CALLBACK GoToWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             return 0;
         }
         if (id == IDCANCEL) {
-            DestroyWindow(hwnd);
+            close_modal(hwnd);
             return 0;
         }
         break;
     }
     case WM_CLOSE:
-        DestroyWindow(hwnd);
+        close_modal(hwnd);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -1372,18 +1383,18 @@ static LRESULT CALLBACK SearchWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             if (sel >= 0 && sel < (int)st->results.size()) {
                 st->out.jump = true;
                 st->out.target = st->results[sel];
-                DestroyWindow(hwnd);
+                close_modal(hwnd);
             }
             return 0;
         }
         if (id == IDCANCEL) {
-            DestroyWindow(hwnd);
+            close_modal(hwnd);
             return 0;
         }
         break;
     }
     case WM_CLOSE:
-        DestroyWindow(hwnd);
+        close_modal(hwnd);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -1612,7 +1623,7 @@ static LRESULT CALLBACK BookmarksWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
             if (!st->settings->khatmah_verse_key.empty() && st->db->get_ayah_by_key(st->settings->khatmah_verse_key, ka)) {
                 st->out.jump = true;
                 st->out.target = ka;
-                DestroyWindow(hwnd);
+                close_modal(hwnd);
             }
             return 0;
         }
@@ -1627,7 +1638,7 @@ static LRESULT CALLBACK BookmarksWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
             if (sel >= 0 && sel < (int)st->bm_ayahs.size()) {
                 st->out.jump = true;
                 st->out.target = st->bm_ayahs[sel];
-                DestroyWindow(hwnd);
+                close_modal(hwnd);
             }
             return 0;
         }
@@ -1655,13 +1666,13 @@ static LRESULT CALLBACK BookmarksWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
             return 0;
         }
         if (id == IDCANCEL) {
-            DestroyWindow(hwnd);
+            close_modal(hwnd);
             return 0;
         }
         break;
     }
     case WM_CLOSE:
-        DestroyWindow(hwnd);
+        close_modal(hwnd);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -1810,17 +1821,17 @@ static LRESULT CALLBACK SajdahNavWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
                 st->selected_verse_key = st->verse_keys[sel];
                 st->accepted = true;
             }
-            DestroyWindow(hwnd);
+            close_modal(hwnd);
             return 0;
         }
         if (id == IDCANCEL) {
-            DestroyWindow(hwnd);
+            close_modal(hwnd);
             return 0;
         }
         break;
     }
     case WM_CLOSE:
-        DestroyWindow(hwnd);
+        close_modal(hwnd);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);
@@ -1992,7 +2003,7 @@ inline void multi_copy_do_copy(HWND dlg, MultiCopyState* st) {
                           : n <= 10 ? (L"تم نسخ " + std::to_wstring(n) + L" آيات") : (L"تم نسخ " + std::to_wstring(n) + L" آية"));
         st->sr->speak(msg, true, st->settings->sapi_fallback);
     }
-    DestroyWindow(dlg);
+    close_modal(dlg);
 }
 
 static LRESULT CALLBACK MultiCopyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
@@ -2012,7 +2023,7 @@ static LRESULT CALLBACK MultiCopyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
         if (id == IDOK || id == 801) { multi_copy_do_copy(hwnd, st); return 0; }
         if (id == 802) { multi_copy_check_all(st, true); return 0; }
         if (id == 803) { multi_copy_check_all(st, false); return 0; }
-        if (id == IDCANCEL) { DestroyWindow(hwnd); return 0; }
+        if (id == IDCANCEL) { close_modal(hwnd); return 0; }
         break;
     }
     case WM_DESTROY:
@@ -2025,7 +2036,7 @@ static LRESULT CALLBACK MultiCopyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
         }
         return 0;
     case WM_CLOSE:
-        DestroyWindow(hwnd);
+        close_modal(hwnd);
         return 0;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);

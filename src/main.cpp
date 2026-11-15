@@ -368,7 +368,14 @@ public:
         return num_str(n) + ((r >= 3 && r <= 10) ? L" صفحات" : L" صفحة");
     }
 
-    bool restarting = false;   // يُعاد فتح البرنامج (لتغيير اللغة): لا نحفظ مرة ثانية عند الإغلاق
+    bool restarting = false;
+    HWND last_focus = nullptr;  // آخر عنصر كان عليه التركيز قبل مغادرة النافذة
+
+    // العنصر الذي يعود إليه التركيز: آخر عنصر كان عليه إن ما زال ظاهراً، وإلا القائمة المعروضة
+    HWND focus_target() const {
+        if (last_focus && IsWindow(last_focus) && IsWindowVisible(last_focus) && IsWindowEnabled(last_focus)) return last_focus;
+        return showing_units ? list_units : list_ayahs;
+    }   // يُعاد فتح البرنامج (لتغيير اللغة): لا نحفظ مرة ثانية عند الإغلاق
 
     // حفظ موضع القراءة وحجم النافذة في الإعدادات
     void save_state() {
@@ -2187,6 +2194,33 @@ static LRESULT CALLBACK SidebarBookmarksSubclassProc(HWND hwnd, UINT msg, WPARAM
 
 static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
+    // عند مغادرة النافذة (برنامج آخر أو نافذة فرعية) نحفظ موضع التركيز، وعند العودة نرجعه إليه،
+    // فيجد قارئ الشاشة المستخدمَ حيث تركه، وتعمل الأسهم مباشرة
+    case WM_ACTIVATE:
+        if (g_app) {
+            if (LOWORD(wParam) == WA_INACTIVE) {
+                HWND f = GetFocus();
+                if (f && IsChild(hwnd, f)) {
+                    // القائمة المنسدلة تضع التركيز في عنصر داخلي؛ نحفظ القائمة نفسها
+                    HWND top = f;
+                    while (GetParent(top) && GetParent(top) != hwnd) top = GetParent(top);
+                    g_app->last_focus = top;
+                }
+            } else if (!HIWORD(wParam)) {   // ليست مصغّرة
+                SetFocus(g_app->focus_target());
+                return 0;
+            }
+        }
+        break;
+
+    case WM_SETFOCUS:
+        // إن وصل التركيز إلى النافذة الرئيسية نفسها نمرّره إلى عنصر يقرؤه قارئ الشاشة
+        if (g_app && g_app->list_ayahs) {
+            SetFocus(g_app->focus_target());
+            return 0;
+        }
+        break;
+
     case WM_SIZE:
         if (g_app) {
             g_app->layout_children(LOWORD(lParam), HIWORD(lParam));
