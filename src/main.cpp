@@ -34,6 +34,10 @@ constexpr int kHeaderInsetX   = 28;
 constexpr int kHeaderInsetY   = 8;
 constexpr int kToolbarHeight  = 52;
 constexpr UINT_PTR kRelayoutTimer = 1;
+// سهما التقليب للمبصر على جانبي صفحة المصحف: يُرسمان على خلفية النافذة دون أي عنصر تحكم،
+// فلا يراهما قارئ الشاشة ولا يدخلان في التنقل بلوحة المفاتيح.
+constexpr int kArrowGutter = 56;
+constexpr int kArrowDiameter = 42;
 
 enum MenuIds : UINT {
     ID_COMBO_BROWSE           = 102,
@@ -181,6 +185,10 @@ public:
     HBRUSH brush_toolbar = nullptr;
     HBRUSH brush_window = nullptr;
     int ayah_rows_width = 0;       // عرض القائمة الذي قُسّمت عليه صفوف الآيات آخر مرة
+    RECT arrow_rect_next{};        // سهم «التالي» (على اليسار المرئي كتقليب المصحف)
+    RECT arrow_rect_prev{};        // سهم «السابق» (على اليمين المرئي)
+    int arrow_hover = 0;           // +1 فوق التالي، -1 فوق السابق، 0 لا شيء
+    bool tracking_mouse = false;
     HICON app_icon = nullptr;
     HACCEL haccel = nullptr;
 
@@ -1100,6 +1108,7 @@ public:
         current_ruku = it.ayah.ruku_number;
         update_window_title_for_ayah(it.ayah);
         sync_sidebar_selection();
+        invalidate_nav_arrows();
         if (speak_now && settings.sr_auto_speak_ayah) {
             say(it.spoken_text, true);
         }
@@ -1218,6 +1227,88 @@ public:
         load_current_browse_unit(a.ayah_number, a.surah_number);
     }
 
+    // الوحدة الحالية وعدد الوحدات حسب طريقة التصفح
+    void unit_position(int& cur, int& count) const {
+        const std::wstring& b = settings.browse_scope;
+        if (b == L"page")        { cur = current_page;   count = db ? db->page_count() : 604; }
+        else if (b == L"juz")    { cur = current_juz;    count = 30; }
+        else if (b == L"hizb")   { cur = current_hizb;   count = 60; }
+        else if (b == L"rub")    { cur = current_rub;    count = 240; }
+        else if (b == L"manzil") { cur = current_manzil; count = 7; }
+        else if (b == L"ruku")   { cur = current_ruku;   count = 558; }
+        else                     { cur = current_surah;  count = 114; }
+    }
+
+    bool can_navigate(int delta) const {
+        int cur = 1, count = 1;
+        unit_position(cur, count);
+        int nxt = cur + delta;
+        return nxt >= 1 && nxt <= count;
+    }
+
+    void invalidate_nav_arrows() {
+        if (!hwnd) return;
+        InvalidateRect(hwnd, &arrow_rect_next, TRUE);
+        InvalidateRect(hwnd, &arrow_rect_prev, TRUE);
+    }
+
+    // +1 فوق سهم التالي، -1 فوق السابق، 0 خارجهما (بإحداثيات منطقة العميل)
+    int arrow_hit_test(POINT pt) const {
+        if (PtInRect(&arrow_rect_next, pt)) return +1;
+        if (PtInRect(&arrow_rect_prev, pt)) return -1;
+        return 0;
+    }
+
+    // دائرة بإطار ذهبي وفي وسطها شارة اتجاه؛ visual_dir: -1 تشير لليسار المرئي، +1 لليمين المرئي
+    void draw_nav_arrow(HDC hdc, const RECT& rc, int visual_dir, bool enabled, bool hover) const {
+        ThemePalette pal = get_theme_palette(settings.theme);
+        auto blend = [](COLORREF a, COLORREF b) {
+            return RGB((GetRValue(a) + GetRValue(b)) / 2, (GetGValue(a) + GetGValue(b)) / 2, (GetBValue(a) + GetBValue(b)) / 2);
+        };
+        COLORREF ring = enabled ? pal.selected_border : blend(pal.selected_border, pal.window_bg);
+        COLORREF fill = (enabled && hover) ? pal.selected_bg : pal.toolbar_bg;
+        COLORREF mark = enabled ? pal.text_header : blend(pal.text_header, pal.window_bg);
+
+        HBRUSH br = CreateSolidBrush(fill);
+        HPEN pen = CreatePen(PS_SOLID, 2, ring);
+        HGDIOBJ ob = SelectObject(hdc, br), op = SelectObject(hdc, pen);
+        Ellipse(hdc, rc.left, rc.top, rc.right, rc.bottom);
+        SelectObject(hdc, ob); SelectObject(hdc, op);
+        DeleteObject(br); DeleteObject(pen);
+
+        // يُرسم السهم على سطح غير معكوس (انظر paint_nav_arrows)، فالاتجاه المرئي هو المنطقي
+        int dir = visual_dir;
+        int cx = (rc.left + rc.right) / 2, cy = (rc.top + rc.bottom) / 2;
+        int w = (rc.right - rc.left) / 7, h = (rc.bottom - rc.top) / 4;
+        POINT pts[3] = {{cx - dir * w, cy - h}, {cx + dir * w, cy}, {cx - dir * w, cy + h}};
+        LOGBRUSH lb{BS_SOLID, mark, 0};
+        HPEN cp = ExtCreatePen(PS_GEOMETRIC | PS_SOLID | PS_ENDCAP_ROUND | PS_JOIN_ROUND, 4, &lb, 0, nullptr);
+        HGDIOBJ old = SelectObject(hdc, cp);
+        Polyline(hdc, pts, 3);
+        SelectObject(hdc, old);
+        DeleteObject(cp);
+    }
+
+    void paint_nav_arrows(HDC hdc) const {
+        if (IsRectEmpty(&arrow_rect_next)) return;
+        // نرسم على سطح غير معكوس حتى لا ينقلب شكل السهم، ونحوّل موضعيهما إلى الإحداثيات المرئية
+        DWORD old_layout = SetLayout(hdc, 0);
+        RECT client;
+        GetClientRect(hwnd, &client);
+        auto to_visual = [&](RECT r) {
+            if (old_layout & LAYOUT_RTL) {
+                LONG w = client.right - client.left;
+                RECT v = {w - r.right, r.top, w - r.left, r.bottom};
+                return v;
+            }
+            return r;
+        };
+        // التالي على اليسار المرئي ويشير إلى اليسار، والسابق على اليمين ويشير إلى اليمين (كتقليب المصحف)
+        draw_nav_arrow(hdc, to_visual(arrow_rect_next), -1, can_navigate(+1), arrow_hover == +1);
+        draw_nav_arrow(hdc, to_visual(arrow_rect_prev), +1, can_navigate(-1), arrow_hover == -1);
+        SetLayout(hdc, old_layout);
+    }
+
     void navigate_unit(int delta) {
         bool moved = false;
         if (settings.browse_scope == L"surah") {
@@ -1246,6 +1337,7 @@ public:
             play_page_turn_sound(assets_dir + L"\\sounds\\page_turn.wav", settings.page_turn_sound);
             update_current_ayah_from_selection(true);
         }
+        invalidate_nav_arrows();
     }
 
     // الصف المحدد في قائمة الآيات (آية أو عنوان سورة أو بيانها أو البسملة)
@@ -1493,8 +1585,22 @@ public:
             MoveWindow(btn_sb_del_bm, inner_x + btn_w + 8, inner_y + inner_h - 34, btn_w, 32, TRUE);
         }
 
-        MoveWindow(list_units, main_x, list_y, main_w, list_h, TRUE);
-        MoveWindow(list_ayahs, main_x, list_y, main_w, list_h, TRUE);
+        // هامشان على جانبي صفحة المصحف لسهمي التقليب
+        invalidate_nav_arrows();
+        int page_x = main_x + kArrowGutter;
+        int page_w = std::max(200, main_w - 2 * kArrowGutter);
+        int cy = list_y + list_h / 2;
+        int r = kArrowDiameter / 2;
+        RECT logical_left = {main_x + kArrowGutter / 2 - r, cy - r, main_x + kArrowGutter / 2 + r, cy + r};
+        RECT logical_right = {page_x + page_w + kArrowGutter / 2 - r, cy - r, page_x + page_w + kArrowGutter / 2 + r, cy + r};
+        // في النافذة المعكوسة يكون الطرف المنطقي الأيمن هو اليسار المرئي
+        bool rtl = (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) != 0;
+        arrow_rect_next = rtl ? logical_right : logical_left;
+        arrow_rect_prev = rtl ? logical_left : logical_right;
+        invalidate_nav_arrows();
+
+        MoveWindow(list_units, page_x, list_y, page_w, list_h, TRUE);
+        MoveWindow(list_ayahs, page_x, list_y, page_w, list_h, TRUE);
 
         // إعادة تقسيم الآيات على العرض الجديد بعد أن يهدأ تغيير الحجم
         if (list_ayahs && ayah_rows_width != 0 && ayah_list_client_width() != ayah_rows_width) {
@@ -1837,8 +1943,58 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             FillRect(hdc, &line, gold);
             DeleteObject(gold);
         }
+        g_app->paint_nav_arrows(hdc);
         return 1;
     }
+
+    // سهما التقليب: للفأرة فقط (لا عنصر تحكم لهما، فلا يصل إليهما قارئ الشاشة)
+    case WM_MOUSEMOVE: {
+        if (!g_app) break;
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        int hit = g_app->arrow_hit_test(pt);
+        if (hit != g_app->arrow_hover) {
+            g_app->arrow_hover = hit;
+            g_app->invalidate_nav_arrows();
+        }
+        if (!g_app->tracking_mouse) {
+            TRACKMOUSEEVENT tme{sizeof(tme), TME_LEAVE, hwnd, 0};
+            g_app->tracking_mouse = TrackMouseEvent(&tme) != FALSE;
+        }
+        break;
+    }
+    case WM_MOUSELEAVE:
+        if (g_app) {
+            g_app->tracking_mouse = false;
+            if (g_app->arrow_hover != 0) {
+                g_app->arrow_hover = 0;
+                g_app->invalidate_nav_arrows();
+            }
+        }
+        return 0;
+    case WM_SETCURSOR:
+        if (g_app && (HWND)wParam == hwnd && LOWORD(lParam) == HTCLIENT) {
+            POINT pt;
+            GetCursorPos(&pt);
+            ScreenToClient(hwnd, &pt);
+            int hit = g_app->arrow_hit_test(pt);
+            if (hit != 0 && g_app->can_navigate(hit)) {
+                SetCursor(LoadCursor(nullptr, IDC_HAND));
+                return TRUE;
+            }
+            SetCursor(LoadCursor(nullptr, IDC_ARROW));
+            return TRUE;
+        }
+        break;
+    case WM_LBUTTONDOWN:
+        if (g_app) {
+            POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+            int hit = g_app->arrow_hit_test(pt);
+            if (hit != 0 && g_app->can_navigate(hit)) {
+                g_app->navigate_unit(hit);
+                return 0;
+            }
+        }
+        break;
 
     case WM_CTLCOLORSTATIC: {
         if (!g_app) break;
