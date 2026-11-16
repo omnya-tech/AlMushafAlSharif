@@ -4,6 +4,7 @@
 #include "database.hpp"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
@@ -334,11 +335,135 @@ int QuranDatabase::load_editions_folder(const std::wstring& folder) {
     if (h == INVALID_HANDLE_VALUE) return 0;
     do {
         if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) continue;
-        EditionCheck c = check_edition_file(folder + L"\\" + fd.cFileName);
-        if (add_edition(c)) ++added;   // الملف الذي فيه أخطاء لا يُعتمد، ويُفحص بأمر --check-edition
+        const std::wstring path = folder + L"\\" + fd.cFileName;
+        EditionCheck c = check_edition_file(path);
+        if (add_edition(c)) {   // الملف الذي فيه أخطاء لا يُعتمد، ويُفحص بأمر --check-edition
+            ++added;
+            // ملف السطور اختياري، باسم ملف البدايات نفسه: shamarly.csv ← shamarly.lines.tsv
+            std::wstring lines_path = path.substr(0, path.size() - 4) + L".lines.tsv";
+            if (GetFileAttributesW(lines_path.c_str()) != INVALID_FILE_ATTRIBUTES) {
+                load_edition_lines(c.info.key, lines_path);
+            }
+        }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
     return added;
+}
+
+std::vector<std::wstring> uthmani_words(const std::wstring& text) {
+    auto is_mark_token = [](const std::wstring& t) {
+        for (wchar_t ch : t) {
+            bool mark = (ch >= 0x06D6 && ch <= 0x06DC) || ch == 0x06DE || ch == 0x06E9;
+            if (!mark) return false;
+        }
+        return !t.empty();
+    };
+    std::vector<std::wstring> out;
+    std::wstring pending;
+    size_t i = 0;
+    const size_t n = text.size();
+    while (i < n) {
+        while (i < n && text[i] == L' ') ++i;
+        if (i >= n) break;
+        size_t j = text.find(L' ', i);
+        if (j == std::wstring::npos) j = n;
+        std::wstring tok = text.substr(i, j - i);
+        i = j;
+        if (is_mark_token(tok)) {
+            if (tok == L"۞") pending = tok + L" ";
+            else if (!out.empty()) out.back() += L" " + tok;
+            else pending += tok + L" ";
+        } else {
+            out.push_back(pending + tok);
+            pending.clear();
+        }
+    }
+    return out;
+}
+
+std::wstring QuranDatabase::load_edition_lines(const std::wstring& key, const std::wstring& path) {
+    const EditionInfo* info = edition_info(key);
+    if (!info || !db_) return L"الطبعة غير معروفة";
+    std::string raw = read_file_utf8(path);
+    if (raw.empty()) return L"ملف السطور فارغ";
+
+    // عدد كلمات كل آية، للتحقق من أن الملف يغطيها كاملة بترتيبها
+    std::vector<int> word_count(max_id_ + 1, 0);
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(db_, "SELECT id, text_uthmani FROM ayahs", -1, &stmt, nullptr) == SQLITE_OK) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            int id = sqlite3_column_int(stmt, 0);
+            if (id >= 1 && id <= max_id_) word_count[id] = (int)uthmani_words(col_wstr(stmt, 1)).size();
+        }
+        sqlite3_finalize(stmt);
+    }
+
+    std::vector<std::vector<EditionLine>> pages(info->page_count);
+    std::vector<int> seen(max_id_ + 1, 0);
+    size_t pos = 0;
+    int line_no = 0;
+    while (pos < raw.size()) {
+        size_t eol = raw.find('\n', pos);
+        if (eol == std::string::npos) eol = raw.size();
+        std::string ln = raw.substr(pos, eol - pos);
+        pos = eol + 1;
+        ++line_no;
+        if (!ln.empty() && ln.back() == '\r') ln.pop_back();
+        if (ln.empty() || ln[0] == '#') continue;
+        // صفحة \t رقم السطر \t النوع \t السورة \t المقاطع
+        std::vector<std::string> f;
+        size_t a = 0;
+        while (true) {
+            size_t t = ln.find('\t', a);
+            f.push_back(ln.substr(a, t == std::string::npos ? std::string::npos : t - a));
+            if (t == std::string::npos) break;
+            a = t + 1;
+        }
+        if (f.size() < 4) return L"سطر غير مكتمل في ملف السطور: " + std::to_wstring(line_no);
+        int page = std::atoi(f[0].c_str());
+        if (page < 1 || page > (int)pages.size()) return L"رقم صفحة خارج الطبعة في السطر " + std::to_wstring(line_no);
+        EditionLine el;
+        el.kind = (f[2] == "banner") ? EditionLineKind::SurahBanner
+                : (f[2] == "basmala") ? EditionLineKind::Basmala : EditionLineKind::Text;
+        el.surah = std::atoi(f[3].c_str());
+        if (f.size() >= 5) {
+            const std::string& sg = f[4];
+            size_t b = 0;
+            while (b < sg.size()) {
+                size_t e = sg.find(' ', b);
+                if (e == std::string::npos) e = sg.size();
+                std::string tok = sg.substr(b, e - b);
+                b = e + 1;
+                if (tok.empty()) continue;
+                EditionLineSeg s;
+                s.ends = (tok.back() == '*');
+                int id = 0, w1 = 0, w2 = 0;
+                if (std::sscanf(tok.c_str(), "%d:%d-%d", &id, &w1, &w2) != 3 || id < 1 || id > max_id_)
+                    return L"مقطع غير مفهوم في السطر " + std::to_wstring(line_no);
+                s.ayah_id = id;
+                s.first_word = w1;
+                s.last_word = w2;
+                if (w1 > 0) {
+                    if (w1 != seen[id] + 1 || w2 < w1 || w2 > word_count[id])
+                        return L"ترتيب الكلمات لا يطابق نص الآية في السطر " + std::to_wstring(line_no);
+                    seen[id] = w2;
+                }
+                el.segs.push_back(s);
+            }
+        }
+        pages[page - 1].push_back(el);
+    }
+    for (int id = 1; id <= max_id_; ++id) {
+        if (seen[id] != word_count[id]) return L"الآية رقم " + std::to_wstring(id) + L" غير مكتملة في ملف السطور";
+    }
+    edition_lines_[key] = std::move(pages);
+    return L"";
+}
+
+std::vector<EditionLine> QuranDatabase::get_page_lines(int page) const {
+    auto it = edition_lines_.find(edition_);
+    if (it == edition_lines_.end() || page < 1 || page > (int)it->second.size()) return {};
+    return it->second[page - 1];
 }
 
 // اسم السورة أو رقمها (بالأرقام العربية أو الإنجليزية، مع «سورة» أو بدونها) → رقمها، أو 0

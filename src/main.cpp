@@ -35,11 +35,14 @@ constexpr int kHeaderInsetX   = 28;
 constexpr int kHeaderInsetY   = 8;
 constexpr int kToolbarHeight  = 52;
 constexpr UINT_PTR kRelayoutTimer = 1;
+constexpr UINT_PTR kControlsTimer = 2;     // إخفاء العلامات المرسومة بعد سكون الفأرة
+constexpr UINT kControlsHideMs = 3000;
 // سهما التقليب للمبصر على جانبي صفحة المصحف: يُرسمان على خلفية النافذة دون أي عنصر تحكم،
 // فلا يراهما قارئ الشاشة ولا يدخلان في التنقل بلوحة المفاتيح.
-constexpr int kArrowGutter = 46;
-constexpr int kArrowDiameter = 34;
-constexpr int kArrowMinWindow = 900;   // أضيق من هذا يُخفى السهمان ويأخذ النص العرض كله
+constexpr int kArrowGutter = 78;       // هامش كل سهم: السهم عند حافة النافذة والنص بعيد عنه
+constexpr int kArrowDiameter = 52;
+constexpr int kArrowEdge = 10;         // بُعد السهم عن حافة النافذة
+constexpr int kArrowMinWindow = 640;   // أضيق من هذا يُخفى السهمان ويأخذ النص العرض كله
 
 enum MenuIds : UINT {
     ID_COMBO_BROWSE           = 102,
@@ -106,6 +109,7 @@ enum MenuIds : UINT {
     IDM_DISPLAY_SURAH    = 1222,
     IDM_ALIGN_CENTER     = 1223,
     IDM_ALIGN_RIGHT      = 1224,
+    IDM_MUSHAF_LINES     = 1225,
     IDM_CYCLE_THEME      = 1234,
     IDM_TOGGLE_MUQATTAAT = 1240,
     IDM_TOGGLE_SOUND     = 1241,
@@ -133,6 +137,12 @@ struct AyahListItemData {
     int height = 48;     // ارتفاع الصف بالبكسل (لا يتجاوز kRowMaxHeight)
     std::vector<std::wstring> lines;  // سطور الآية بعد اللفّ، تُرسم كما قيست تماماً
     int line_h = 0;
+
+    // سطر من سطور الطبعة (عرض «سطور الطبعة»): كلماته تُوزَّع على عرض السطر كالمصحف الورقي
+    bool mushaf_line = false;
+    bool justify = false;              // سطر كامل يُمدّ على العرض، وإلا يُوسَّط (كآخر سطر في السورة)
+    std::vector<std::wstring> words;   // الكلمات وعلامات نهاية الآيات بترتيب القراءة
+    std::vector<int> word_w;           // عرض كل كلمة بخط السطور
 };
 
 // إجراء قائمة الآيات الأصلي (قبل الاستبدال) — يُستخدم لإكمال حركة الأسهم فوق الصفوف التكميلية
@@ -176,6 +186,30 @@ public:
     int pending_surah_info_num = 0;
     bool showing_units = false;
     bool focus_mode = false;
+    WINDOWPLACEMENT saved_placement{};   // موضع النافذة قبل ملء الشاشة، يُستعاد عند الخروج
+    LONG saved_style = 0;
+
+    // وضع التركيز يملأ الشاشة فعلاً: بلا شريط عنوان ولا حواف، على الشاشة التي فيها النافذة
+    void apply_fullscreen(bool on) {
+        if (on) {
+            saved_placement = {};
+            saved_placement.length = sizeof(saved_placement);
+            GetWindowPlacement(hwnd, &saved_placement);
+            saved_style = GetWindowLongW(hwnd, GWL_STYLE);
+            MONITORINFO mi{sizeof(mi)};
+            GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi);
+            SetWindowLongW(hwnd, GWL_STYLE, saved_style & ~WS_OVERLAPPEDWINDOW);
+            SetWindowPos(hwnd, HWND_TOP, mi.rcMonitor.left, mi.rcMonitor.top,
+                         mi.rcMonitor.right - mi.rcMonitor.left, mi.rcMonitor.bottom - mi.rcMonitor.top,
+                         SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+        } else if (saved_style) {
+            SetWindowLongW(hwnd, GWL_STYLE, saved_style);
+            SetWindowPlacement(hwnd, &saved_placement);
+            SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER | SWP_FRAMECHANGED);
+            saved_style = 0;
+        }
+    }
     bool updating_combos = false;
 
     std::vector<AyahInfo> current_ayahs;
@@ -189,12 +223,41 @@ public:
     HFONT font_quran = nullptr;
     HFONT font_header = nullptr;
     HFONT font_details = nullptr;
+    HFONT font_line = nullptr;     // خط سطور الطبعة (أميري قرآن)، يُصغَّر حتى يتسع أطول سطر في الصفحة
+    int font_line_px = 0;
     HBRUSH brush_paper = nullptr;
     HBRUSH brush_toolbar = nullptr;
     HBRUSH brush_window = nullptr;
     int ayah_rows_width = 0;       // عرض القائمة الذي قُسّمت عليه صفوف الآيات آخر مرة
     RECT arrow_rect_next{};        // سهم «التالي» (على اليسار المرئي كتقليب المصحف)
     RECT arrow_rect_prev{};        // سهم «السابق» (على اليمين المرئي)
+    RECT exit_full_rect{};         // زر ملء الشاشة / الخروج منه (للفأرة فقط)
+    RECT close_app_rect{};         // زر إغلاق البرنامج في ملء الشاشة (لا شريط عنوان فيه)
+    // العلامات المرسومة لا تظهر إلا حين تتحرك الفأرة، فلا يشغل القارئَ عن القرآن شيء
+    bool controls_visible = false;
+    POINT last_mouse{-1, -1};
+
+    void poke_controls() {
+        POINT pt;
+        GetCursorPos(&pt);
+        if (pt.x == last_mouse.x && pt.y == last_mouse.y) return;   // رسائل حركة بلا حركة فعلية
+        last_mouse = pt;
+        if (!controls_visible) {
+            controls_visible = true;
+            invalidate_nav_arrows();
+        }
+        SetTimer(hwnd, kControlsTimer, kControlsHideMs, nullptr);
+    }
+
+    void hide_controls_if_idle() {
+        if (arrow_hover != 0) {   // الفأرة فوق علامة: تبقى ظاهرة
+            SetTimer(hwnd, kControlsTimer, kControlsHideMs, nullptr);
+            return;
+        }
+        KillTimer(hwnd, kControlsTimer);
+        controls_visible = false;
+        invalidate_nav_arrows();
+    }
     int arrow_hover = 0;           // +1 فوق التالي، -1 فوق السابق، 0 لا شيء
     bool tracking_mouse = false;
 
@@ -389,7 +452,10 @@ public:
         settings.last_ayah = current_ayah_num;
         WINDOWPLACEMENT wp{};
         wp.length = sizeof(wp);
-        if (hwnd && GetWindowPlacement(hwnd, &wp)) {
+        bool have = false;
+        if (focus_mode && saved_placement.length) { wp = saved_placement; have = true; }   // لا نحفظ حجم ملء الشاشة
+        else if (hwnd) have = GetWindowPlacement(hwnd, &wp) != FALSE;
+        if (have) {
             const RECT& r = wp.rcNormalPosition;
             settings.window_x = r.left;
             settings.window_y = r.top;
@@ -572,6 +638,11 @@ public:
         AppendMenuW(m_align, MF_STRING | (settings.doc_alignment == L"right" ? MF_CHECKED : 0), IDM_ALIGN_RIGHT,
                     tr(L"محاذاة لليمين", L"Right-aligned").c_str());
         AppendMenuW(m_opts, MF_POPUP, (UINT_PTR)m_align, tr(L"محاذاة السطور", L"Line alignment").c_str());
+        // يظهر مفعّلاً فقط للطبعة التي لها ملف سطور (كالشمرلي)، ويعمل عند التصفح بالصفحة
+        AppendMenuW(m_opts, MF_STRING | (settings.mushaf_lines ? MF_CHECKED : 0) |
+                    ((db && db->has_edition_lines()) ? 0 : MF_GRAYED), IDM_MUSHAF_LINES,
+                    tr(L"سطور الطبعة كما في المصحف (عند التصفح بالصفحة)",
+                       L"Edition lines as in the printed Mushaf (when browsing by page)").c_str());
 
         HMENU m_lang = CreatePopupMenu();
         AppendMenuW(m_lang, MF_STRING | (!is_en() ? MF_CHECKED : 0), IDM_LANG_AR, tr(L"العربية", L"Arabic").c_str());
@@ -1100,7 +1171,174 @@ public:
         return first;
     }
 
+    // عرض «سطور الطبعة»: تصفح بالصفحة في طبعة لها ملف سطور
+    bool mushaf_lines_active() const {
+        return settings.mushaf_lines && settings.browse_scope == L"page" && db && db->has_edition_lines();
+    }
+
+    // خط السطور بحجم بكسل محدد (يُعاد إنشاؤه فقط إذا تغيّر الحجم)
+    void ensure_line_font(int px) {
+        if (font_line && font_line_px == px) return;
+        if (font_line) DeleteObject(font_line);
+        font_line = CreateFontW(-px, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Amiri Quran");
+        font_line_px = px;
+    }
+
+    // يبني صفوف الصفحة سطراً سطراً كما في الطبعة: ترويسة السورة، والبسملة، وسطور الآيات
+    void build_mushaf_line_rows(int page, int target_ayah, int target_surah) {
+        std::vector<EditionLine> lines = db->get_page_lines(page);
+        std::map<int, AyahInfo> by_id;
+        for (const auto& a : current_ayahs) by_id[a.id] = a;
+        std::map<int, std::vector<std::wstring>> words_of;
+        auto ayah_of = [&](int id) -> const AyahInfo& {
+            auto it = by_id.find(id);
+            if (it == by_id.end()) {
+                AyahInfo a;
+                db->get_ayah_by_id(id, a);
+                it = by_id.emplace(id, a).first;
+            }
+            return it->second;
+        };
+        auto words = [&](int id) -> const std::vector<std::wstring>& {
+            auto it = words_of.find(id);
+            if (it == words_of.end()) it = words_of.emplace(id, uthmani_words(ayah_of(id).text_uthmani)).first;
+            return it->second;
+        };
+
+        // كلمات كل سطر، والنص المنطوق له
+        struct Built { const EditionLine* src; std::vector<std::wstring> w; std::wstring spoken; int ayah_id; };
+        std::vector<Built> built;
+        for (const auto& ln : lines) {
+            Built b{&ln, {}, L"", 0};
+            for (const auto& sg : ln.segs) {
+                const AyahInfo& a = ayah_of(sg.ayah_id);
+                if (sg.first_word > 0) {
+                    if (!b.ayah_id) b.ayah_id = sg.ayah_id;
+                    const auto& ws = words(sg.ayah_id);
+                    for (int k = sg.first_word; k <= sg.last_word && k <= (int)ws.size(); ++k) {
+                        b.w.push_back(ws[k - 1]);
+                        if (!b.spoken.empty()) b.spoken += L" ";
+                        b.spoken += ws[k - 1];
+                    }
+                }
+                if (sg.ends) {
+                    b.w.push_back(L"۝" + to_arabic_digits(a.ayah_number));
+                    b.spoken += L" (" + num_str(a.ayah_number) + L")";
+                }
+            }
+            if (!b.ayah_id && !ln.segs.empty()) b.ayah_id = ln.segs.front().ayah_id;
+            built.push_back(std::move(b));
+        }
+
+        // حجم الخط: حجم القراءة المختار، مصغَّراً عند الحاجة حتى يتسع أطول سطر في الصفحة
+        HDC hdc = GetDC(list_ayahs);
+        const int avail = ayah_list_client_width() - 2 * kRowPadX - kAccentWidth - 8;
+        int dpi_y = GetDeviceCaps(hdc, LOGPIXELSY);
+        int px = MulDiv(settings.quran_font_size, dpi_y, 72);
+        auto natural = [&](const Built& b, std::vector<int>* ww) {
+            SIZE sp{};
+            GetTextExtentPoint32W(hdc, L" ", 1, &sp);
+            int total = 0;
+            for (const auto& w : b.w) {
+                SIZE sz{};
+                GetTextExtentPoint32W(hdc, w.c_str(), (int)w.size(), &sz);
+                if (ww) ww->push_back(sz.cx);
+                total += sz.cx + sp.cx;
+            }
+            return std::max(0, total - (int)sp.cx);
+        };
+        for (int pass = 0; pass < 3; ++pass) {
+            ensure_line_font(px);
+            HGDIOBJ old = SelectObject(hdc, font_line);
+            int widest = 0;
+            for (const auto& b : built) widest = std::max(widest, natural(b, nullptr));
+            SelectObject(hdc, old);
+            if (widest <= avail || px <= 12) break;
+            px = std::max(12, (int)(px * (double)avail / widest) - 1);
+        }
+        HGDIOBJ old_f = SelectObject(hdc, font_line);
+        int widest = 0;
+        for (const auto& b : built) widest = std::max(widest, natural(b, nullptr));
+        const int lh = quran_line_height(hdc);
+
+        int target_row = -1, first_text_row = -1;
+        for (size_t i = 0; i < built.size(); ++i) {
+            const auto& b = built[i];
+            const EditionLine& ln = *b.src;
+            if (ln.kind != EditionLineKind::Text) {
+                // الترويسة والبسملة بالشكل المعتاد في البرنامج
+                SurahInfo s = db->get_surah(ln.surah);
+                AyahInfo first;
+                db->get_ayah(ln.surah, 1, first);
+                AyahListItemData it;
+                it.ayah = first;
+                it.ayah.page_number = page;
+                if (ln.kind == EditionLineKind::SurahBanner) {
+                    it.kind = ListItemKind::SurahHeader;
+                    it.visual_text = s.name_uthmani;
+                    it.spoken_text = is_en() ? (L"Surah " + s.name_arabic) : (L"سورة " + s.name_arabic);
+                } else {
+                    it.kind = ListItemKind::Basmala;
+                    it.visual_text = L"بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ";
+                    it.spoken_text = L"بِسْمِ اللَّهِ الرَّحْمَنِ الرَّحِيمِ";
+                }
+                SelectObject(hdc, old_f);
+                add_ayah_list_row(hdc, it);
+                old_f = SelectObject(hdc, font_line);
+                continue;
+            }
+            AyahListItemData it;
+            it.kind = ListItemKind::Ayah;
+            it.mushaf_line = true;
+            it.ayah = ayah_of(b.ayah_id);
+            it.ayah.page_number = page;   // السطر الذي يكمل آية من الصفحة السابقة يُعدّ من صفحته
+            it.words = b.w;
+            int nat = natural(b, &it.word_w);
+            // السطر الذي يملأ معظم العرض يُمدّ ككل سطور المصحف، والقصير (آخر السورة) يُوسَّط
+            it.justify = nat >= widest * 82 / 100;
+            it.spoken_text = b.spoken;
+            it.visual_text = b.spoken;
+            it.line_h = lh;
+            it.first_row = (int)ayah_items.size();
+            it.height = lh + 8;
+            const int row = (int)ayah_items.size();
+            ayah_items.push_back(it);
+            SendMessageW(list_ayahs, LB_ADDSTRING, 0, (LPARAM)it.spoken_text.c_str());
+            if (first_text_row < 0) first_text_row = row;
+            if (target_row < 0 && target_ayah > 0) {
+                for (const auto& sg : ln.segs) {
+                    const AyahInfo& a = ayah_of(sg.ayah_id);
+                    if (sg.first_word == 1 && a.ayah_number == target_ayah &&
+                        (target_surah <= 0 || a.surah_number == target_surah)) {
+                        target_row = row;
+                        break;
+                    }
+                }
+            }
+        }
+        SelectObject(hdc, old_f);
+        ReleaseDC(list_ayahs, hdc);
+        if (target_row < 0) target_row = (first_text_row >= 0) ? first_text_row : 0;
+        if (!ayah_items.empty()) {
+            SendMessageW(list_ayahs, LB_SETCURSEL, target_row, 0);
+            update_current_ayah_from_selection(false);
+        }
+    }
+
     void set_ayahs_in_list(const std::vector<AyahInfo>& ayahs, int target_ayah, int target_surah) {
+        if (mushaf_lines_active() && !ayahs.empty()) {
+            current_ayahs = ayahs;
+            ayah_items.clear();
+            ayah_rows_width = ayah_list_client_width();
+            SendMessageW(list_ayahs, WM_SETREDRAW, FALSE, 0);
+            SendMessageW(list_ayahs, LB_RESETCONTENT, 0, 0);
+            build_mushaf_line_rows(current_page, target_ayah, target_surah);
+            SendMessageW(list_ayahs, WM_SETREDRAW, TRUE, 0);
+            InvalidateRect(list_ayahs, nullptr, TRUE);
+            return;
+        }
         current_ayahs = ayahs;
         ayah_items.clear();
         ayah_rows_width = ayah_list_client_width();
@@ -1417,12 +1655,23 @@ public:
 
     void invalidate_nav_arrows() {
         if (!hwnd) return;
-        InvalidateRect(hwnd, &arrow_rect_next, TRUE);
-        InvalidateRect(hwnd, &arrow_rect_prev, TRUE);
+        // الإطار السميك عند مرور الفأرة يتجاوز حدود الدائرة قليلاً، فنمسح حولها بهامش
+        for (const RECT* r : {&arrow_rect_next, &arrow_rect_prev, &exit_full_rect, &close_app_rect}) {
+            if (IsRectEmpty(r)) continue;
+            RECT big = *r;
+            InflateRect(&big, 6, 6);
+            InvalidateRect(hwnd, &big, TRUE);
+        }
     }
 
-    // +1 فوق سهم التالي، -1 فوق السابق، 0 خارجهما (بإحداثيات منطقة العميل)
+    // +1 فوق سهم التالي، -1 فوق السابق، kHitExitFull فوق زر ملء الشاشة، kHitClose فوق زر الإغلاق، 0 خارجها
+    static constexpr int kHitExitFull = 2;
+    static constexpr int kHitClose = 3;
+    bool hit_enabled(int hit) const { return hit == kHitExitFull || hit == kHitClose || (hit != 0 && can_navigate(hit)); }
     int arrow_hit_test(POINT pt) const {
+        if (!controls_visible) return 0;
+        if (PtInRect(&close_app_rect, pt)) return kHitClose;
+        if (PtInRect(&exit_full_rect, pt)) return kHitExitFull;
         if (PtInRect(&arrow_rect_next, pt)) return +1;
         if (PtInRect(&arrow_rect_prev, pt)) return -1;
         return 0;
@@ -1434,12 +1683,14 @@ public:
         auto blend = [](COLORREF a, COLORREF b) {
             return RGB((GetRValue(a) + GetRValue(b)) / 2, (GetGValue(a) + GetGValue(b)) / 2, (GetBValue(a) + GetBValue(b)) / 2);
         };
-        COLORREF ring = enabled ? pal.selected_border : blend(pal.selected_border, pal.window_bg);
-        COLORREF fill = (enabled && hover) ? pal.selected_bg : pal.toolbar_bg;
-        COLORREF mark = enabled ? pal.text_header : blend(pal.text_header, pal.window_bg);
+        // دائرة ممتلئة بلون الإطار الذهبي وسهم بلون الورق: تباين واضح على أي مظهر.
+        // المعطّل (أول المصحف أو آخره) باهت، وعند مرور الفأرة يغمق الإطار
+        COLORREF ring = enabled ? (hover ? pal.text_header : pal.selected_border) : blend(pal.selected_border, pal.window_bg);
+        COLORREF fill = enabled ? pal.selected_border : blend(pal.toolbar_bg, pal.window_bg);
+        COLORREF mark = enabled ? pal.paper_bg : blend(pal.selected_border, pal.window_bg);
 
         HBRUSH br = CreateSolidBrush(fill);
-        HPEN pen = CreatePen(PS_SOLID, 2, ring);
+        HPEN pen = CreatePen(PS_SOLID, hover ? 4 : 2, ring);
         HGDIOBJ ob = SelectObject(hdc, br), op = SelectObject(hdc, pen);
         Ellipse(hdc, rc.left, rc.top, rc.right, rc.bottom);
         SelectObject(hdc, ob); SelectObject(hdc, op);
@@ -1451,15 +1702,51 @@ public:
         int w = (rc.right - rc.left) / 7, h = (rc.bottom - rc.top) / 4;
         POINT pts[3] = {{cx - dir * w, cy - h}, {cx + dir * w, cy}, {cx - dir * w, cy + h}};
         LOGBRUSH lb{BS_SOLID, mark, 0};
-        HPEN cp = ExtCreatePen(PS_GEOMETRIC | PS_SOLID | PS_ENDCAP_ROUND | PS_JOIN_ROUND, 4, &lb, 0, nullptr);
+        HPEN cp = ExtCreatePen(PS_GEOMETRIC | PS_SOLID | PS_ENDCAP_ROUND | PS_JOIN_ROUND, 6, &lb, 0, nullptr);
         HGDIOBJ old = SelectObject(hdc, cp);
         Polyline(hdc, pts, 3);
         SelectObject(hdc, old);
         DeleteObject(cp);
     }
 
+    // زر الخروج من ملء الشاشة: دائرة كالسهمين وفي وسطها علامة ×
+    void draw_exit_full(HDC hdc, const RECT& rc, bool hover, bool close_mark = false) const {
+        ThemePalette pal = get_theme_palette(effective_theme());
+        HBRUSH br = CreateSolidBrush(pal.selected_border);
+        HPEN pen = CreatePen(PS_SOLID, hover ? 4 : 2, hover ? pal.text_header : pal.selected_border);
+        HGDIOBJ ob = SelectObject(hdc, br), op = SelectObject(hdc, pen);
+        Ellipse(hdc, rc.left, rc.top, rc.right, rc.bottom);
+        SelectObject(hdc, ob); SelectObject(hdc, op);
+        DeleteObject(br); DeleteObject(pen);
+        int cx = (rc.left + rc.right) / 2, cy = (rc.top + rc.bottom) / 2, d = (rc.right - rc.left) / 6;
+        LOGBRUSH lb{BS_SOLID, pal.paper_bg, 0};
+        HPEN cp = ExtCreatePen(PS_GEOMETRIC | PS_SOLID | PS_ENDCAP_ROUND | PS_JOIN_ROUND, close_mark ? 5 : 3, &lb, 0, nullptr);
+        HGDIOBJ old = SelectObject(hdc, cp);
+        if (close_mark) {   // × لإغلاق البرنامج
+            MoveToEx(hdc, cx - d, cy - d, nullptr); LineTo(hdc, cx + d, cy + d);
+            MoveToEx(hdc, cx + d, cy - d, nullptr); LineTo(hdc, cx - d, cy + d);
+        } else {
+            // أربع زوايا: متجهة للخارج للتكبير، وللداخل للخروج من ملء الشاشة
+            int e = d + 2, k = d;
+            for (int sx : {-1, 1}) for (int sy : {-1, 1}) {
+                if (!focus_mode) {
+                    POINT pts[3] = {{cx + sx * e, cy + sy * (e - k)}, {cx + sx * e, cy + sy * e}, {cx + sx * (e - k), cy + sy * e}};
+                    Polyline(hdc, pts, 3);
+                } else {
+                    // زاوية رأسها قريب من المركز وذراعاها نحو حافة الدائرة (علامة التصغير المعروفة)
+                    int q = d / 2 + 2, outer = d + 6;
+                    POINT pts[3] = {{cx + sx * q, cy + sy * outer}, {cx + sx * q, cy + sy * q}, {cx + sx * outer, cy + sy * q}};
+                    Polyline(hdc, pts, 3);
+                }
+            }
+        }
+        SelectObject(hdc, old);
+        DeleteObject(cp);
+    }
+
     void paint_nav_arrows(HDC hdc) const {
-        if (IsRectEmpty(&arrow_rect_next)) return;
+        if (!controls_visible) return;
+        if (IsRectEmpty(&arrow_rect_next) && IsRectEmpty(&exit_full_rect)) return;
         // نرسم على سطح غير معكوس حتى لا ينقلب شكل السهم، ونحوّل موضعيهما إلى الإحداثيات المرئية
         DWORD old_layout = SetLayout(hdc, 0);
         RECT client;
@@ -1473,8 +1760,12 @@ public:
             return r;
         };
         // التالي على اليسار المرئي ويشير إلى اليسار، والسابق على اليمين ويشير إلى اليمين (كتقليب المصحف)
-        draw_nav_arrow(hdc, to_visual(arrow_rect_next), -1, can_navigate(+1), arrow_hover == +1);
-        draw_nav_arrow(hdc, to_visual(arrow_rect_prev), +1, can_navigate(-1), arrow_hover == -1);
+        if (!IsRectEmpty(&arrow_rect_next)) {
+            draw_nav_arrow(hdc, to_visual(arrow_rect_next), -1, can_navigate(+1), arrow_hover == +1);
+            draw_nav_arrow(hdc, to_visual(arrow_rect_prev), +1, can_navigate(-1), arrow_hover == -1);
+        }
+        if (!IsRectEmpty(&exit_full_rect)) draw_exit_full(hdc, to_visual(exit_full_rect), arrow_hover == kHitExitFull);
+        if (!IsRectEmpty(&close_app_rect)) draw_exit_full(hdc, to_visual(close_app_rect), arrow_hover == kHitClose, true);
         SetLayout(hdc, old_layout);
     }
 
@@ -1841,8 +2132,11 @@ public:
         int page_w = std::max(200, main_w - 2 * gutter);
         int cy = list_y + list_h / 2;
         int r = kArrowDiameter / 2;
-        RECT logical_left = {main_x + kArrowGutter / 2 - r, cy - r, main_x + kArrowGutter / 2 + r, cy + r};
-        RECT logical_right = {page_x + page_w + kArrowGutter / 2 - r, cy - r, page_x + page_w + kArrowGutter / 2 + r, cy + r};
+        // كل سهم عند الحافة الخارجية لهامشه (حافة النافذة، أو حافة الفهرس الجانبي إن ظهر)
+        int lx = sb_vis ? (main_x + 2) : kArrowEdge;
+        int rx = width - kArrowEdge - kArrowDiameter;
+        RECT logical_left = {lx, cy - r, lx + kArrowDiameter, cy + r};
+        RECT logical_right = {rx, cy - r, rx + kArrowDiameter, cy + r};
         // في النافذة المعكوسة يكون الطرف المنطقي الأيمن هو اليسار المرئي
         bool rtl = (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) != 0;
         arrow_rect_next = rtl ? logical_right : logical_left;
@@ -1851,6 +2145,14 @@ public:
             SetRectEmpty(&arrow_rect_next);
             SetRectEmpty(&arrow_rect_prev);
         }
+        // زر الخروج من ملء الشاشة في الركن العلوي: الأيسر في الواجهة العربية (الطرف المنطقي الأيمن)
+        // والأيمن في الإنجليزية، كزر الإغلاق في ويندوز، داخل هامش السهم فلا يغطي النص
+        // خارج وضع التركيز يكون الزر نفسه للدخول إلى ملء الشاشة (علامة تكبير)، في هامش السهم فلا يغيّر شيئاً في الشاشة
+        if (focus_mode || arrows_on) exit_full_rect = {rx, list_y, rx + kArrowDiameter, list_y + kArrowDiameter};
+        else SetRectEmpty(&exit_full_rect);
+        // في ملء الشاشة لا شريط عنوان، فزر الإغلاق في الركن العلوي الآخر (لا يُخلط بزر الخروج من ملء الشاشة)
+        if (focus_mode) close_app_rect = {lx, list_y, lx + kArrowDiameter, list_y + kArrowDiameter};
+        else SetRectEmpty(&close_app_rect);
         invalidate_nav_arrows();
 
         MoveWindow(list_units, page_x, list_y, page_w, list_h, TRUE);
@@ -1987,6 +2289,7 @@ static RECT inline_copy_button_rect(const RECT& item_rc, bool rtl_layout) {
 }
 
 static LRESULT CALLBACK AyahListSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    if (msg == WM_MOUSEMOVE && g_app) g_app->poke_controls();   // حركة الفأرة فوق النص تُظهر العلامات
     if (msg == WM_LBUTTONDOWN && g_app && g_app->settings.show_inline_copy_btn) {
         int mx = GET_X_LPARAM(lParam);
         int my = GET_Y_LPARAM(lParam);
@@ -2273,6 +2576,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
     // سهما التقليب: للفأرة فقط (لا عنصر تحكم لهما، فلا يصل إليهما قارئ الشاشة)
     case WM_MOUSEMOVE: {
         if (!g_app) break;
+        g_app->poke_controls();
         POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
         int hit = g_app->arrow_hit_test(pt);
         if (hit != g_app->arrow_hover) {
@@ -2300,7 +2604,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             GetCursorPos(&pt);
             ScreenToClient(hwnd, &pt);
             int hit = g_app->arrow_hit_test(pt);
-            if (hit != 0 && g_app->can_navigate(hit)) {
+            if (g_app->hit_enabled(hit)) {
                 SetCursor(LoadCursor(nullptr, IDC_HAND));
                 return TRUE;
             }
@@ -2312,6 +2616,14 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         if (g_app) {
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             int hit = g_app->arrow_hit_test(pt);
+            if (hit == MushafAppWindow::kHitClose) {
+                PostMessageW(hwnd, WM_CLOSE, 0, 0);
+                return 0;
+            }
+            if (hit == MushafAppWindow::kHitExitFull) {
+                SendMessageW(hwnd, WM_COMMAND, IDM_FOCUS_MODE, 0);
+                return 0;
+            }
             if (hit != 0 && g_app->can_navigate(hit)) {
                 g_app->navigate_unit(hit);
                 return 0;
@@ -2346,6 +2658,10 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
     }
 
     case WM_TIMER:
+        if (wParam == kControlsTimer && g_app) {
+            g_app->hide_controls_if_idle();
+            return 0;
+        }
         if (wParam == kRelayoutTimer && g_app) {
             KillTimer(hwnd, kRelayoutTimer);
             g_app->relayout_ayah_rows();
@@ -2394,7 +2710,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                     FillRect(dis->hDC, &start_bar, sbr);
                     DeleteObject(sbr);
 
-                    if (is_ayah && item.seg_index == 0 && g_app->settings.show_inline_copy_btn) {
+                    if (is_ayah && !item.mushaf_line && item.seg_index == 0 && g_app->settings.show_inline_copy_btn) {
                         RECT btn_rc = inline_copy_button_rect(dis->rcItem, rtl);
                         HBRUSH bbr = CreateSolidBrush(pal.toolbar_bg);
                         FillRect(dis->hDC, &btn_rc, bbr);
@@ -2415,8 +2731,41 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 text_rc.left += kRowPadX;
                 text_rc.right -= kRowPadX;
                 if (rtl) text_rc.left += kAccentWidth; else text_rc.right -= kAccentWidth;
-                if (is_ayah && g_app->settings.show_inline_copy_btn) {
+                if (is_ayah && !item.mushaf_line && g_app->settings.show_inline_copy_btn) {
                     if (rtl) text_rc.right -= kInlineBtnWidth; else text_rc.left += kInlineBtnWidth;
+                }
+
+                if (item.mushaf_line && g_app->font_line) {
+                    // سطر الطبعة: الكلمات من اليمين المرئي إلى اليسار، والمسافة الزائدة تتوزع بينها بالتساوي
+                    HGDIOBJ old_lf = SelectObject(dis->hDC, g_app->font_line);
+                    SetBkMode(dis->hDC, TRANSPARENT);
+                    SetTextColor(dis->hDC, fg);
+                    SIZE sp{};
+                    GetTextExtentPoint32W(dis->hDC, L" ", 1, &sp);
+                    const int n = (int)std::min(item.words.size(), item.word_w.size());
+                    int words_w = 0;
+                    for (int k = 0; k < n; ++k) words_w += item.word_w[k];
+                    const int avail = (int)(text_rc.right - text_rc.left) - 8;
+                    double gap = sp.cx;
+                    int used = words_w + (n > 1 ? (int)(gap * (n - 1)) : 0);
+                    if (item.justify && n > 1 && avail > words_w) {
+                        gap = (double)(avail - words_w) / (n - 1);
+                        used = avail;
+                    }
+                    // في التخطيط المعكوس اليسار المنطقي هو اليمين المرئي، فنتقدم بالإحداثي المنطقي موجباً
+                    const int extra = std::max(0, avail - used);
+                    double x = rtl ? (text_rc.left + 4 + extra / 2) : (text_rc.right - 4 - extra / 2);
+                    const int top = text_rc.top + std::max(0, (int)((text_rc.bottom - text_rc.top) - item.line_h) / 2);
+                    for (int k = 0; k < n; ++k) {
+                        const int w = item.word_w[k];
+                        RECT wr;
+                        if (rtl) { wr = {(LONG)x, top, (LONG)x + w, top + item.line_h}; x += w + gap; }
+                        else     { wr = {(LONG)(x - w), top, (LONG)x, top + item.line_h}; x -= w + gap; }
+                        DrawTextW(dis->hDC, item.words[k].c_str(), (int)item.words[k].size(), &wr,
+                                  DT_CENTER | DT_SINGLELINE | DT_NOCLIP | DT_NOPREFIX | dt_reading_flag(dis->hDC, true));
+                    }
+                    SelectObject(dis->hDC, old_lf);
+                    return TRUE;
                 }
 
                 if (item.kind == ListItemKind::SurahHeader) {
@@ -2724,6 +3073,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 
         case IDM_FOCUS_MODE:
             g_app->focus_mode = !g_app->focus_mode;
+            g_app->apply_fullscreen(g_app->focus_mode);
             g_app->build_menus();
             g_app->update_sidebar_visibility();
             SetFocus(g_app->showing_units ? g_app->list_units : g_app->list_ayahs);
@@ -3164,6 +3514,16 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             InvalidateRect(g_app->list_ayahs, nullptr, TRUE);
             g_app->say(id == IDM_ALIGN_RIGHT ? g_app->tr(L"محاذاة السطور لليمين", L"Lines right-aligned")
                                              : g_app->tr(L"توسيط السطور كالمصحف", L"Lines centered like a Mushaf"));
+            return 0;
+
+        case IDM_MUSHAF_LINES:
+            g_app->settings.mushaf_lines = !g_app->settings.mushaf_lines;
+            g_app->settings.save();
+            g_app->build_menus();
+            g_app->load_current_browse_unit(g_app->current_ayah_num, g_app->current_surah);
+            g_app->say(g_app->settings.mushaf_lines
+                           ? g_app->tr(L"سطور الطبعة كما في المصحف", L"Edition lines as in the Mushaf")
+                           : g_app->tr(L"الآيات آيةً آية", L"One ayah per row"));
             return 0;
 
         case IDM_DISPLAY_TEXT:

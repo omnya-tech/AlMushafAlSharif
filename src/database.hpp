@@ -88,6 +88,26 @@ struct EditionCheck {
     bool ok() const { return errors.empty() && !page_starts.empty(); }
 };
 
+// سطور طبعة مصورة (مثل الشمرلي): كل سطر كما في المصحف الورقي، بكلماته
+// first_word = 0 يعني أن السطر يبدأ بعلامة نهاية الآية وحدها (كلماتها كلها في السطر السابق)
+struct EditionLineSeg {
+    int ayah_id = 0;
+    int first_word = 1;
+    int last_word = 0;
+    bool ends = false;   // تنتهي الآية في هذا السطر (تُرسم علامتها بعده)
+};
+
+enum class EditionLineKind { Text, SurahBanner, Basmala };
+
+struct EditionLine {
+    EditionLineKind kind = EditionLineKind::Text;
+    int surah = 1;
+    std::vector<EditionLineSeg> segs;
+};
+
+// كلمات الآية بالرسم العثماني كما تُعدّ في ملف السطور: علامات الوقف تلحق بالكلمة قبلها، و«۞» بالتي بعدها
+std::vector<std::wstring> uthmani_words(const std::wstring& text_uthmani);
+
 struct SurahHeadingInfo {
     std::wstring type;
     std::wstring excepted_verses;
@@ -117,6 +137,12 @@ public:
 
     int page_count() const;
     int total_ayahs() const { return max_id_; }
+
+    // سطور الطبعة الحالية (إن كان لها ملف سطور)، صفحةً صفحة
+    bool has_edition_lines() const { return edition_lines_.count(edition_) > 0; }
+    std::vector<EditionLine> get_page_lines(int page) const;
+    // يقرأ ملف السطور ويتحقق أنه يغطي كل كلمات القرآن بترتيبها؛ يعيد رسالة خطأ أو نصاً فارغاً
+    std::wstring load_edition_lines(const std::wstring& key, const std::wstring& path);
 
     int page_of_id(int ayah_id) const;
     std::pair<int, int> page_id_bounds(int page) const;
@@ -163,6 +189,7 @@ private:
     std::set<int> rub_start_ids_;
     std::map<int, SurahHeadingInfo> headings_map_;
     std::vector<EditionInfo> editions_;
+    std::map<std::wstring, std::vector<std::vector<EditionLine>>> edition_lines_;   // [صفحة-١] → سطورها
     mutable std::vector<int> ayah_text_len_;   // طول نص كل آية، لفحص كمية النص في الصفحة
 
     mutable std::map<std::wstring, std::vector<DivisionRangeInfo>> page_info_cache_;

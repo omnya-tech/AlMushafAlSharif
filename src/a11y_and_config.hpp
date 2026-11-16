@@ -265,6 +265,7 @@ struct AppSettings {
     std::wstring startup_focus = L"surah_index"; // surah_index | ayahs | units
     bool show_sidebar = false;              // الواجهة النظيفة: «تصفح حسب» وقائمة الآيات فقط
     bool show_inline_copy_btn = false;
+    bool mushaf_lines = true;   // تصفح الصفحات بسطور الطبعة نفسها إن كان لها ملف سطور (كالشمرلي)
     bool show_ayah_letter_count = false;
     int ui_layout_version = 4;
     bool page_turn_sound = true;
@@ -381,6 +382,7 @@ struct AppSettings {
         }
         get_bool("show_sidebar", show_sidebar);
         get_bool("show_inline_copy_btn", show_inline_copy_btn);
+        get_bool("mushaf_lines", mushaf_lines);
         get_bool("show_ayah_letter_count", show_ayah_letter_count);
         int layout_ver = 1;
         get_int("ui_layout_version", layout_ver);
@@ -480,6 +482,7 @@ struct AppSettings {
         oss << "  \"startup_focus\": \"" << json_escape(startup_focus) << "\",\n";
         oss << "  \"show_sidebar\": " << (show_sidebar ? "true" : "false") << ",\n";
         oss << "  \"show_inline_copy_btn\": " << (show_inline_copy_btn ? "true" : "false") << ",\n";
+        oss << "  \"mushaf_lines\": " << (mushaf_lines ? "true" : "false") << ",\n";
         oss << "  \"show_ayah_letter_count\": " << (show_ayah_letter_count ? "true" : "false") << ",\n";
         oss << "  \"ui_layout_version\": " << ui_layout_version << ",\n";
         oss << "  \"page_turn_sound\": " << (page_turn_sound ? "true" : "false") << ",\n";
