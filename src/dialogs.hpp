@@ -19,6 +19,7 @@
 #include "sajdah_and_formatter.hpp"
 #include "a11y_and_config.hpp"
 #include "shortcuts.hpp"
+#include "dpi.hpp"
 
 namespace mushaf {
 
@@ -359,6 +360,7 @@ inline void show_line_reader_dialog(
     SendMessageW(btn_copy_all, WM_SETFONT, (WPARAM)ui_font, TRUE);
     SendMessageW(btn_close, WM_SETFONT, (WPARAM)ui_font, TRUE);
 
+    fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
     SetFocus(st.list_hwnd);
 
@@ -908,6 +910,7 @@ inline bool show_options_dialog(
     tab_order.push_back(btn_save);
     tab_order.push_back(btn_cancel);
 
+    fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
     SetFocus(st.combo_browse);
 
@@ -1230,6 +1233,7 @@ inline GoToResult show_goto_dialog(
     tab_order.push_back(st.tab_ctrl);
     tab_order.push_back(btn_cancel);
 
+    fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
     SetFocus(st.combo_surah);
 
@@ -1506,6 +1510,7 @@ inline SearchDlgResult show_search_dialog(
         SendMessageW(h, WM_SETFONT, (WPARAM)ui_font, TRUE);
     }
 
+    fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
     SetFocus(st.edit_query);
 
@@ -1781,6 +1786,7 @@ inline SearchDlgResult show_bookmarks_dialog(
 
     refresh_bookmarks_dialog_ui(&st);
 
+    fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
     SetFocus(st.list_hwnd);
 
@@ -1921,6 +1927,7 @@ inline bool show_sajdah_navigator_dialog(
         SendMessageW(h, WM_SETFONT, (WPARAM)ui_font, TRUE);
     }
 
+    fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
     SetFocus(st.list_hwnd);
 
@@ -2146,6 +2153,7 @@ inline bool show_multi_copy_dialog(
         SendMessageW(h, WM_SETFONT, (WPARAM)ui_font, TRUE);
     }
 
+    fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
     SetFocus(st.list);
 

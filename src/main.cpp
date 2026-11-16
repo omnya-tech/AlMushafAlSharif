@@ -42,7 +42,9 @@ constexpr UINT kControlsHideMs = 3000;
 constexpr int kArrowGutter = 78;       // هامش كل سهم: السهم عند حافة النافذة والنص بعيد عنه
 constexpr int kArrowDiameter = 52;
 constexpr int kArrowEdge = 10;         // بُعد السهم عن حافة النافذة
-constexpr int kArrowMinWindow = 640;   // أضيق من هذا يُخفى السهمان ويأخذ النص العرض كله
+constexpr int kArrowMinWindow = 640;
+constexpr int kPageMaxWidth = 980;     // أقصى عرض لصفحة المصحف بمقاس ٩٦ نقطة (الشاشات الكبيرة)
+constexpr int kPageMaxEm = 28;         // أو ٢٨ ضعف حجم خط القرآن إن كبّره القارئ   // أضيق من هذا يُخفى السهمان ويأخذ النص العرض كله
 
 enum MenuIds : UINT {
     ID_COMBO_BROWSE           = 102,
@@ -372,9 +374,7 @@ public:
         if (brush_toolbar) DeleteObject(brush_toolbar);
         if (brush_window) DeleteObject(brush_window);
 
-        HDC hdc = GetDC(hwnd);
-        int dpi_y = hdc ? GetDeviceCaps(hdc, LOGPIXELSY) : 96;
-        if (hdc) ReleaseDC(hwnd, hdc);
+        const int dpi_y = ui_dpi();
 
         auto pt_to_px = [&](int pt) { return -MulDiv(pt, dpi_y, 72); };
 
@@ -388,21 +388,12 @@ public:
             DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
             CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Amiri"
         );
-        font_quran = CreateFontW(
-            pt_to_px(settings.quran_font_size), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, settings.quran_font_family.c_str()
-        );
-        font_header = CreateFontW(
-            pt_to_px(std::max(16, (int)(settings.quran_font_size * 0.8))), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Amiri"
-        );
-        font_details = CreateFontW(
-            pt_to_px(std::max(13, (int)(settings.quran_font_size * 0.55))), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-            DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-            CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Amiri"
-        );
+        font_quran = create_quran_font(pt_to_px(settings.quran_font_size), settings.quran_font_family.c_str());
+        // اسم السورة سطر واحد داخل إطاره، وسطر بياناتها قد يلتف إلى سطرين: كلاهما يتسع لحد ارتفاع الصف
+        font_header = create_quran_font(pt_to_px(std::max(16, (int)(settings.quran_font_size * 0.8))), L"Amiri", FW_BOLD,
+                                        kRowMaxHeight - 2 * DS(kHeaderInsetY) - DS(30));
+        font_details = create_quran_font(pt_to_px(std::max(13, (int)(settings.quran_font_size * 0.55))), L"Amiri", FW_NORMAL,
+                                         (kRowMaxHeight - 2 * DS(kRowPadY)) / 2);
 
         ThemePalette pal = get_theme_palette(effective_theme());
         brush_paper = CreateSolidBrush(pal.paper_bg);
@@ -1067,9 +1058,9 @@ public:
 
     // العرض المتاح لنص الآية بعد الهوامش وشريط التحديد (وزر النسخ المضمّن إن كان مفعّلاً)
     int ayah_text_width(ListItemKind kind) const {
-        int w = ayah_list_client_width() - 2 * kRowPadX - kAccentWidth;
-        if (kind == ListItemKind::SurahHeader) w -= 2 * kHeaderInsetX + 28;
-        if (kind == ListItemKind::Ayah && settings.show_inline_copy_btn) w -= kInlineBtnWidth;
+        int w = ayah_list_client_width() - 2 * DS(kRowPadX) - DS(kAccentWidth);
+        if (kind == ListItemKind::SurahHeader) w -= 2 * DS(kHeaderInsetX) + 28;
+        if (kind == ListItemKind::Ayah && settings.show_inline_copy_btn) w -= DS(kInlineBtnWidth);
         return std::max(120, w);
     }
 
@@ -1123,6 +1114,30 @@ public:
     }
 
     // ارتفاع سطر الآية مع مسافة بسيطة بين السطور تريح العين
+    // ويندوز لا يقبل صفاً أعلى من ٢٥٥ نقطة في القائمة: في الشاشة عالية الدقة مع أكبر خط قد لا يتسع سطر
+    // واحد لصفه فيُقصّ، فنصغّر الخط إلى أكبر حجم يتسع سطره (ما دون ذلك يبقى بالحجم المختار تماماً)
+    static HFONT create_quran_font(int height, const wchar_t* family, int weight = FW_NORMAL, int max_lh = 0) {
+        auto make = [&](int h) {
+            return CreateFontW(h, 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                               CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, family);
+        };
+        HFONT f = make(height);
+        if (max_lh <= 0) max_lh = kRowMaxHeight - 2 * DS(kRowPadY);
+        HDC dc = CreateCompatibleDC(nullptr);
+        for (int pass = 0; dc && f && pass < 4; ++pass) {
+            HGDIOBJ old = SelectObject(dc, f);
+            const int lh = quran_line_height(dc);
+            SelectObject(dc, old);
+            if (lh <= max_lh) break;
+            height = (int)(height * (double)max_lh / lh);
+            if (height > -8) height = -8;
+            DeleteObject(f);
+            f = make(height);
+        }
+        if (dc) DeleteDC(dc);
+        return f;
+    }
+
     static int quran_line_height(HDC hdc) {
         TEXTMETRICW tm{};
         GetTextMetricsW(hdc, &tm);
@@ -1139,7 +1154,7 @@ public:
             // هامش أمان صغير حتى لا يلامس آخر حرف حافة السطر
             auto lines = wrap_text_lines(hdc, item.visual_text, width - 6);
             const int lh = quran_line_height(hdc);
-            const int per_row = std::max(1, (kRowMaxHeight - 2 * kRowPadY) / std::max(1, lh));
+            const int per_row = std::max(1, (kRowMaxHeight - 2 * DS(kRowPadY)) / std::max(1, lh));
             const int n = ((int)lines.size() + per_row - 1) / per_row;
             for (int i = 0; i < n; ++i) {
                 AyahListItemData row = item;
@@ -1155,20 +1170,20 @@ public:
                 row.seg_index = i;
                 row.seg_count = n;
                 row.first_row = first;
-                int pad_top = (i == 0) ? kRowPadY : 0;
-                int pad_bottom = (i == n - 1) ? kRowPadY : 0;
+                int pad_top = (i == 0) ? DS(kRowPadY) : 0;
+                int pad_bottom = (i == n - 1) ? DS(kRowPadY) : 0;
                 int h = (int)row.lines.size() * lh + pad_top + pad_bottom;
-                row.height = std::min(kRowMaxHeight, std::max(n == 1 ? 48 : 8, h));
+                row.height = std::min(kRowMaxHeight, std::max(n == 1 ? DS(48) : DS(8), h));
                 ayah_items.push_back(row);
                 // كل صفوف الآية تحمل نصها المنطوق كاملاً، فأي صف يقف عليه قارئ الشاشة يقرأ الآية كلها
                 SendMessageW(list_ayahs, LB_ADDSTRING, 0, (LPARAM)row.spoken_text.c_str());
             }
         } else {
             // الترويسة: هامش الإطار + حشوة النص داخله + مسافة تنفّس
-            int pad = (item.kind == ListItemKind::SurahHeader) ? (2 * kHeaderInsetY + 12 + 18) : kRowPadY * 2;
+            int pad = (item.kind == ListItemKind::SurahHeader) ? (2 * DS(kHeaderInsetY) + DS(30)) : DS(kRowPadY) * 2;
             int h = measure_text_height(hdc, item.visual_text, width) + pad;
             item.first_row = first;
-            item.height = std::min(kRowMaxHeight, std::max(40, h));
+            item.height = std::min(kRowMaxHeight, std::max(DS(40), h));
             ayah_items.push_back(item);
             SendMessageW(list_ayahs, LB_ADDSTRING, 0, (LPARAM)item.spoken_text.c_str());
         }
@@ -1185,9 +1200,7 @@ public:
     void ensure_line_font(int px) {
         if (font_line && font_line_px == px) return;
         if (font_line) DeleteObject(font_line);
-        font_line = CreateFontW(-px, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
-                                DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
-                                CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Amiri Quran");
+        font_line = create_quran_font(-px, L"Amiri Quran");
         font_line_px = px;
     }
 
@@ -1239,9 +1252,8 @@ public:
 
         // حجم الخط: حجم القراءة المختار، مصغَّراً عند الحاجة حتى يتسع أطول سطر في الصفحة
         HDC hdc = GetDC(list_ayahs);
-        const int avail = ayah_list_client_width() - 2 * kRowPadX - kAccentWidth - 8;
-        int dpi_y = GetDeviceCaps(hdc, LOGPIXELSY);
-        int px = MulDiv(settings.quran_font_size, dpi_y, 72);
+        const int avail = ayah_list_client_width() - 2 * DS(kRowPadX) - DS(kAccentWidth) - 8;
+        int px = MulDiv(settings.quran_font_size, ui_dpi(), 72);
         auto natural = [&](const Built& b, std::vector<int>* ww) {
             SIZE sp{};
             GetTextExtentPoint32W(hdc, L" ", 1, &sp);
@@ -1307,7 +1319,7 @@ public:
             it.visual_text = b.spoken;
             it.line_h = lh;
             it.first_row = (int)ayah_items.size();
-            it.height = lh + 8;
+            it.height = std::min(kRowMaxHeight, lh + DS(8));
             const int row = (int)ayah_items.size();
             ayah_items.push_back(it);
             SendMessageW(list_ayahs, LB_ADDSTRING, 0, (LPARAM)it.spoken_text.c_str());
@@ -1732,7 +1744,7 @@ public:
 
         RECT outer = frame_rect;
         RECT inner = frame_rect;
-        InflateRect(&inner, -7, -7);
+        InflateRect(&inner, -DS(7), -DS(7));
         // الشريط بين الخطين
         HBRUSH bb = CreateSolidBrush(band);
         RECT strips[4] = {{outer.left, outer.top, outer.right, inner.top}, {outer.left, inner.bottom, outer.right, outer.bottom},
@@ -1746,8 +1758,8 @@ public:
                          {r.left, r.top, r.left + t, r.bottom}, {r.right - t, r.top, r.right, r.bottom}};
             for (const RECT& x : e) FillRect(hdc, &x, gb);
         };
-        frame(outer, 3);
-        frame(inner, 1);
+        frame(outer, std::max(2, DS(3)));
+        frame(inner, std::max(1, DS(1)));
         // معيّنات صغيرة: كبيرة في الأركان، وأصغر في أوساط الأضلاع
         HPEN np = (HPEN)GetStockObject(NULL_PEN);
         HGDIOBJ op = SelectObject(hdc, np), ob = SelectObject(hdc, gb);
@@ -1757,15 +1769,15 @@ public:
         };
         const int ix = (outer.left + inner.left) / 2, iy = (outer.top + inner.top) / 2;
         const int jx = (outer.right + inner.right) / 2, jy = (outer.bottom + inner.bottom) / 2;
-        for (POINT c : {POINT{ix, iy}, POINT{jx, iy}, POINT{ix, jy}, POINT{jx, jy}}) diamond(c.x, c.y, 8);
-        diamond((ix + jx) / 2, iy, 5);
-        diamond((ix + jx) / 2, jy, 5);
-        diamond(ix, (iy + jy) / 2, 5);
-        diamond(jx, (iy + jy) / 2, 5);
+        for (POINT c : {POINT{ix, iy}, POINT{jx, iy}, POINT{ix, jy}, POINT{jx, jy}}) diamond(c.x, c.y, DS(8));
+        diamond((ix + jx) / 2, iy, DS(5));
+        diamond((ix + jx) / 2, jy, DS(5));
+        diamond(ix, (iy + jy) / 2, DS(5));
+        diamond(jx, (iy + jy) / 2, DS(5));
         // نقطة بلون الورق في قلب معيّنات الأركان
         HBRUSH pb = CreateSolidBrush(band);
         SelectObject(hdc, pb);
-        for (POINT c : {POINT{ix, iy}, POINT{jx, iy}, POINT{ix, jy}, POINT{jx, jy}}) diamond(c.x, c.y, 3);
+        for (POINT c : {POINT{ix, iy}, POINT{jx, iy}, POINT{ix, jy}, POINT{jx, jy}}) diamond(c.x, c.y, DS(3));
         SelectObject(hdc, op); SelectObject(hdc, ob);
         DeleteObject(pb);
         DeleteObject(gb);
@@ -2102,11 +2114,30 @@ public:
         say(msg);
     }
 
-    void update_sidebar_visibility() {
-        bool sb_vis = settings.show_sidebar && !focus_mode;
-        if (sb_vis) populate_sidebar_index_list();
-        int active_tab = tab_sidebar ? (int)SendMessageW(tab_sidebar, TCM_GETCURSEL, 0, 0) : 0;
+    bool sidebar_fits = true;   // تتسع النافذة للفهرس الجانبي مع صفحة مريحة (يُحسب في التخطيط)
+    bool sidebar_shown = false;  // آخر حالة طُبّقت على عناصر الفهرس
+    bool sidebar_visible() const { return settings.show_sidebar && !focus_mode && sidebar_fits; }
 
+    void apply_sidebar_visibility(bool sb_vis) {
+        if (sb_vis && !sidebar_shown) populate_sidebar_index_list();
+        // إن اختفى الفهرس والتركيز فيه ننقله إلى المصحف حتى لا يضيع قارئ الشاشة
+        if (!sb_vis && sidebar_shown) {
+            HWND f = GetFocus();
+            if (f && (f == edit_sidebar_filter || f == tab_sidebar || f == list_sidebar_index || f == list_sidebar_bookmarks ||
+                      f == btn_sb_copy_bm || f == btn_sb_del_bm))
+                SetFocus(showing_units ? list_units : list_ayahs);
+        }
+        sidebar_shown = sb_vis;
+        int active_tab = tab_sidebar ? (int)SendMessageW(tab_sidebar, TCM_GETCURSEL, 0, 0) : 0;
+        ShowWindow(edit_sidebar_filter,    sb_vis ? SW_SHOW : SW_HIDE);
+        ShowWindow(tab_sidebar,            sb_vis ? SW_SHOW : SW_HIDE);
+        ShowWindow(list_sidebar_index,     (sb_vis && active_tab == 0) ? SW_SHOW : SW_HIDE);
+        ShowWindow(list_sidebar_bookmarks, (sb_vis && active_tab == 1) ? SW_SHOW : SW_HIDE);
+        ShowWindow(btn_sb_copy_bm,         (sb_vis && active_tab == 1) ? SW_SHOW : SW_HIDE);
+        ShowWindow(btn_sb_del_bm,          (sb_vis && active_tab == 1) ? SW_SHOW : SW_HIDE);
+    }
+
+    void update_sidebar_visibility() {
         bool ed_vis = !focus_mode && has_multiple_editions();
         ShowWindow(lbl_edition,   ed_vis ? SW_SHOW : SW_HIDE);
         ShowWindow(combo_edition, ed_vis ? SW_SHOW : SW_HIDE);
@@ -2114,13 +2145,7 @@ public:
         ShowWindow(combo_browse,  focus_mode ? SW_HIDE : SW_SHOW);
         ShowWindow(btn_search,    focus_mode ? SW_HIDE : SW_SHOW);
         ShowWindow(lbl_position,  focus_mode ? SW_HIDE : SW_SHOW);
-
-        ShowWindow(edit_sidebar_filter,    sb_vis ? SW_SHOW : SW_HIDE);
-        ShowWindow(tab_sidebar,            sb_vis ? SW_SHOW : SW_HIDE);
-        ShowWindow(list_sidebar_index,     (sb_vis && active_tab == 0) ? SW_SHOW : SW_HIDE);
-        ShowWindow(list_sidebar_bookmarks, (sb_vis && active_tab == 1) ? SW_SHOW : SW_HIDE);
-        ShowWindow(btn_sb_copy_bm,         (sb_vis && active_tab == 1) ? SW_SHOW : SW_HIDE);
-        ShowWindow(btn_sb_del_bm,          (sb_vis && active_tab == 1) ? SW_SHOW : SW_HIDE);
+        sidebar_shown = !sidebar_visible();   // نجبر التطبيق التالي على تحديث العناصر
 
         RECT rc;
         GetClientRect(hwnd, &rc);
@@ -2130,7 +2155,7 @@ public:
 
     void cycle_landmarks_f6() {
         HWND foc = GetFocus();
-        bool sb_vis = settings.show_sidebar && !focus_mode;
+        bool sb_vis = sidebar_visible();
         if (foc == list_ayahs || foc == list_units) {
             if (!focus_mode) SetFocus(combo_browse);
         } else if (foc == combo_browse) {
@@ -2142,65 +2167,91 @@ public:
     }
 
     void layout_children(int width, int height) {
-        int tb_h = focus_mode ? 0 : kToolbarHeight;
+        int tb_h = focus_mode ? 0 : DS(kToolbarHeight);
         if (!focus_mode) {
-            // الشريط العلوي: «تصفح حسب» في البداية، وسطر الموضع الحالي في الطرف الآخر
-            // «الطبعة» أولاً إن وُجدت أكثر من طبعة، ثم «تصفح حسب» وزر البحث، وسطر الموضع في الطرف الآخر
-            int x = 16;
-            if (has_multiple_editions()) {
-                MoveWindow(lbl_edition, x, 13, 62, 26, TRUE);
-                MoveWindow(combo_edition, x + 66, 10, 220, 320, TRUE);
-                x += 66 + 220 + 18;
+            // «الطبعة» أولاً إن وُجدت أكثر من طبعة، ثم «تصفح حسب» وزر البحث، وسطر الموضع في الطرف الآخر.
+            // في الشاشة الضيقة تنكمش القوائم والزر، ويُخفى سطر الموضع (موضع القراءة في عنوان النافذة أيضاً)
+            const bool ed = has_multiple_editions();
+            int ed_w = 220, br_w = 340, se_w = 210;
+            const int fixed = 16 + (ed ? 66 + 18 : 0) + 104 + 14 + 16;
+            const int want = fixed + (ed ? ed_w : 0) + br_w + se_w;
+            const int avail = MulDiv(width, 96, ui_dpi());          // العرض المتاح بمقاسات ٩٦ نقطة
+            if (avail < want) {
+                double f = std::max(0.45, (double)(avail - fixed) / (want - fixed));
+                ed_w = (int)(ed_w * f); br_w = (int)(br_w * f); se_w = (int)(se_w * f);
             }
-            MoveWindow(lbl_browse, x, 13, 100, 26, TRUE);
-            MoveWindow(combo_browse, x + 104, 10, 340, 320, TRUE);
-            MoveWindow(btn_search, x + 458, 10, 210, 31, TRUE);
-            int px = x + 684;
-            MoveWindow(lbl_position, px, 12, std::max(0, width - px - 18), 28, TRUE);
+            int x = 16;
+            if (ed) {
+                MoveWindow(lbl_edition, DS(x), DS(13), DS(62), DS(26), TRUE);
+                MoveWindow(combo_edition, DS(x + 66), DS(10), DS(ed_w), DS(320), TRUE);
+                x += 66 + ed_w + 18;
+            }
+            MoveWindow(lbl_browse, DS(x), DS(13), DS(100), DS(26), TRUE);
+            MoveWindow(combo_browse, DS(x + 104), DS(10), DS(br_w), DS(320), TRUE);
+            MoveWindow(btn_search, DS(x + 104 + br_w + 14), DS(10), DS(se_w), DS(31), TRUE);
+            int px = x + 104 + br_w + 14 + se_w + 16;
+            const int pos_w = avail - px - 18;
+            ShowWindow(lbl_position, pos_w >= 260 ? SW_SHOW : SW_HIDE);
+            MoveWindow(lbl_position, DS(px), DS(12), std::max(0, DS(pos_w)), DS(28), TRUE);
         }
 
         // الإطار المذهّب يحتاج هامشاً يسيراً فوق الصفحة وتحتها (ويظهر فقط إن اتسعت النافذة للسهمين)
-        const bool frame_on = settings.show_mushaf_frame && width >= kArrowMinWindow;
-        int list_y = tb_h + (frame_on ? 24 : 10);
-        int list_h = std::max(100, height - list_y - (frame_on ? 24 : 12));
+        const bool frame_on = settings.show_mushaf_frame && width >= DS(kArrowMinWindow);
+        int list_y = tb_h + DS(frame_on ? 24 : 10);
+        int list_h = std::max(DS(100), height - list_y - DS(frame_on ? 24 : 12));
 
-        bool sb_vis = settings.show_sidebar && !focus_mode;
-        int sb_w = sb_vis ? 330 : 0;
-        int sb_x = 12;
-        int main_x = sb_vis ? (sb_x + sb_w + 12) : 12;
-        int main_w = std::max(200, width - main_x - 12);
+        // الفهرس الجانبي يُخفى تلقائياً إن لم يبق للمصحف عرض مريح (دون تغيير الإعداد نفسه)
+        sidebar_fits = (width - DS(330 + 24)) >= DS(620);
+        bool sb_vis = sidebar_visible();
+        apply_sidebar_visibility(sb_vis);
+        int sb_w = sb_vis ? DS(330) : 0;
+        int sb_x = DS(12);
+        int main_x = sb_vis ? (sb_x + sb_w + DS(12)) : DS(12);
+        int main_w = std::max(DS(200), width - main_x - DS(12));
 
         if (sb_vis) {
-            MoveWindow(edit_sidebar_filter, sb_x, list_y, sb_w, 30, TRUE);
-            int tab_y = list_y + 36;
-            int tab_h = std::max(80, list_h - 36);
+            MoveWindow(edit_sidebar_filter, sb_x, list_y, sb_w, DS(30), TRUE);
+            int tab_y = list_y + DS(36);
+            int tab_h = std::max(DS(80), list_h - DS(36));
             MoveWindow(tab_sidebar, sb_x, tab_y, sb_w, tab_h, TRUE);
 
-            int inner_x = sb_x + 6;
-            int inner_y = tab_y + 32;
-            int inner_w = sb_w - 12;
-            int inner_h = std::max(60, tab_h - 38);
+            int inner_x = sb_x + DS(6);
+            int inner_y = tab_y + DS(32);
+            int inner_w = sb_w - DS(12);
+            int inner_h = std::max(DS(60), tab_h - DS(38));
 
             MoveWindow(list_sidebar_index, inner_x, inner_y, inner_w, inner_h, TRUE);
-            MoveWindow(list_sidebar_bookmarks, inner_x, inner_y, inner_w, std::max(40, inner_h - 40), TRUE);
-            int btn_w = (inner_w - 8) / 2;
-            MoveWindow(btn_sb_copy_bm, inner_x, inner_y + inner_h - 34, btn_w, 32, TRUE);
-            MoveWindow(btn_sb_del_bm, inner_x + btn_w + 8, inner_y + inner_h - 34, btn_w, 32, TRUE);
+            MoveWindow(list_sidebar_bookmarks, inner_x, inner_y, inner_w, std::max(DS(40), inner_h - DS(40)), TRUE);
+            int btn_w = (inner_w - DS(8)) / 2;
+            MoveWindow(btn_sb_copy_bm, inner_x, inner_y + inner_h - DS(34), btn_w, DS(32), TRUE);
+            MoveWindow(btn_sb_del_bm, inner_x + btn_w + DS(8), inner_y + inner_h - DS(34), btn_w, DS(32), TRUE);
         }
 
         // هامشان على جانبي صفحة المصحف لسهمي التقليب
         invalidate_nav_arrows();
-        const bool arrows_on = width >= kArrowMinWindow;
-        const int gutter = arrows_on ? kArrowGutter : 0;
+        const bool arrows_on = width >= DS(kArrowMinWindow);
+        const int gutter = arrows_on ? DS(kArrowGutter) : 0;
         int page_x = main_x + gutter;
-        int page_w = std::max(200, main_w - 2 * gutter);
+        int page_w = std::max(DS(200), main_w - 2 * gutter);
+        // في الشاشة الكبيرة لا تتمدد الصفحة بعرضها كله (سطر طويل يُتعب العين ويباعد كلمات سطور المصحف):
+        // للصفحة عرض أقصى يتبع حجم خط القرآن، وتتوسط المساحة ومعها إطارها وسهماها
+        const int em = MulDiv(settings.quran_font_size, ui_dpi(), 72);
+        const int max_page_w = std::max(DS(kPageMaxWidth), em * kPageMaxEm);
+        int page_shift = 0;
+        if (page_w > max_page_w) {
+            page_shift = (page_w - max_page_w) / 2;
+            page_x += page_shift;
+            page_w = max_page_w;
+        }
         int cy = list_y + list_h / 2;
-        int r = kArrowDiameter / 2;
+        int r = DS(kArrowDiameter) / 2;
         // كل سهم عند الحافة الخارجية لهامشه (حافة النافذة، أو حافة الفهرس الجانبي إن ظهر)
-        int lx = sb_vis ? (main_x + 2) : kArrowEdge;
-        int rx = width - kArrowEdge - kArrowDiameter;
-        RECT logical_left = {lx, cy - r, lx + kArrowDiameter, cy + r};
-        RECT logical_right = {rx, cy - r, rx + kArrowDiameter, cy + r};
+        int lx = sb_vis ? (main_x + DS(2)) : DS(kArrowEdge);
+        int rx = width - DS(kArrowEdge) - DS(kArrowDiameter);
+        // السهمان بجوار الصفحة نفسها؛ أما علامات ملء الشاشة والإغلاق فتبقى في ركني النافذة
+        const int ax_l = lx + page_shift, ax_r = rx - page_shift;
+        RECT logical_left = {ax_l, cy - r, ax_l + DS(kArrowDiameter), cy + r};
+        RECT logical_right = {ax_r, cy - r, ax_r + DS(kArrowDiameter), cy + r};
         // في النافذة المعكوسة يكون الطرف المنطقي الأيمن هو اليسار المرئي
         bool rtl = (GetWindowLongW(hwnd, GWL_EXSTYLE) & WS_EX_LAYOUTRTL) != 0;
         arrow_rect_next = rtl ? logical_right : logical_left;
@@ -2212,15 +2263,15 @@ public:
         // زر الخروج من ملء الشاشة في الركن العلوي: الأيسر في الواجهة العربية (الطرف المنطقي الأيمن)
         // والأيمن في الإنجليزية، كزر الإغلاق في ويندوز، داخل هامش السهم فلا يغطي النص
         // خارج وضع التركيز يكون الزر نفسه للدخول إلى ملء الشاشة (علامة تكبير)، في هامش السهم فلا يغيّر شيئاً في الشاشة
-        if (focus_mode || arrows_on) exit_full_rect = {rx, list_y, rx + kArrowDiameter, list_y + kArrowDiameter};
+        if (focus_mode || arrows_on) exit_full_rect = {rx, list_y, rx + DS(kArrowDiameter), list_y + DS(kArrowDiameter)};
         else SetRectEmpty(&exit_full_rect);
         // في ملء الشاشة لا شريط عنوان، فزر الإغلاق في الركن العلوي الآخر (لا يُخلط بزر الخروج من ملء الشاشة)
-        if (focus_mode) close_app_rect = {lx, list_y, lx + kArrowDiameter, list_y + kArrowDiameter};
+        if (focus_mode) close_app_rect = {lx, list_y, lx + DS(kArrowDiameter), list_y + DS(kArrowDiameter)};
         else SetRectEmpty(&close_app_rect);
         invalidate_nav_arrows();
 
         if (frame_on) {
-            frame_rect = {page_x - 16, list_y - 16, page_x + page_w + 16, list_y + list_h + 16};
+            frame_rect = {page_x - DS(16), list_y - DS(16), page_x + page_w + DS(16), list_y + list_h + DS(16)};
         } else {
             SetRectEmpty(&frame_rect);
         }
@@ -2601,6 +2652,37 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         }
         return 0;
 
+    // نُقلت النافذة إلى شاشة بدقة أخرى (أو غيّر المستخدم تكبير النص): نعيد الخطوط والمقاسات بالدقة الجديدة
+    case WM_DPICHANGED:
+        if (g_app) {
+            ui_dpi() = HIWORD(wParam) ? HIWORD(wParam) : 96;
+            g_app->recreate_fonts_and_brushes();
+            const RECT* r = reinterpret_cast<const RECT*>(lParam);
+            if (!g_app->focus_mode) {
+                SetWindowPos(hwnd, nullptr, r->left, r->top, r->right - r->left, r->bottom - r->top,
+                             SWP_NOZORDER | SWP_NOACTIVATE);
+            } else {
+                MONITORINFO mi{sizeof(mi)};
+                GetMonitorInfoW(MonitorFromRect(r, MONITOR_DEFAULTTONEAREST), &mi);
+                SetWindowPos(hwnd, nullptr, mi.rcMonitor.left, mi.rcMonitor.top, mi.rcMonitor.right - mi.rcMonitor.left,
+                             mi.rcMonitor.bottom - mi.rcMonitor.top, SWP_NOZORDER | SWP_NOACTIVATE);
+            }
+            RECT rc;
+            GetClientRect(hwnd, &rc);
+            g_app->layout_children(rc.right, rc.bottom);
+            g_app->load_current_browse_unit(g_app->current_ayah_num, g_app->current_surah);
+        }
+        return 0;
+
+    // أصغر حجم للنافذة: يبقى فيه المصحف مقروءاً والشريط العلوي غير متراكب
+    case WM_GETMINMAXINFO: {
+        auto* mm = reinterpret_cast<MINMAXINFO*>(lParam);
+        const RECT wa = work_area_of(hwnd);   // لا يتجاوز الحد الأدنى الشاشة نفسها (تكبير كبير على شاشة صغيرة)
+        mm->ptMinTrackSize.x = std::min(DS(520), (int)(wa.right - wa.left));
+        mm->ptMinTrackSize.y = std::min(DS(400), (int)(wa.bottom - wa.top));
+        return 0;
+    }
+
     case WM_NOTIFY: {
         auto* nm = reinterpret_cast<NMHDR*>(lParam);
         if (nm && nm->idFrom == ID_TAB_SIDEBAR && nm->code == TCN_SELCHANGE && g_app) {
@@ -2632,7 +2714,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             // شريط علوي هادئ يفصله عن صفحة المصحف خط ذهبي رفيع
             ThemePalette pal = get_theme_palette(g_app->effective_theme());
             RECT tb = rc;
-            tb.bottom = kToolbarHeight;
+            tb.bottom = DS(kToolbarHeight);
             FillRect(hdc, &tb, g_app->brush_toolbar);
             RECT line = tb;
             line.top = tb.bottom - 2;
@@ -2774,8 +2856,8 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 
                 // في التخطيط المعكوس (الواجهة العربية) يكون اليسار المنطقي هو اليمين المرئي
                 RECT start_bar = dis->rcItem;
-                if (rtl) start_bar.right = start_bar.left + kAccentWidth;
-                else     start_bar.left = start_bar.right - kAccentWidth;
+                if (rtl) start_bar.right = start_bar.left + DS(kAccentWidth);
+                else     start_bar.left = start_bar.right - DS(kAccentWidth);
 
                 if (selected) {
                     HBRUSH sbr = CreateSolidBrush(pal.selected_border);
@@ -2800,11 +2882,11 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 }
 
                 RECT text_rc = dis->rcItem;
-                text_rc.left += kRowPadX;
-                text_rc.right -= kRowPadX;
-                if (rtl) text_rc.left += kAccentWidth; else text_rc.right -= kAccentWidth;
+                text_rc.left += DS(kRowPadX);
+                text_rc.right -= DS(kRowPadX);
+                if (rtl) text_rc.left += DS(kAccentWidth); else text_rc.right -= DS(kAccentWidth);
                 if (is_ayah && !item.mushaf_line && g_app->settings.show_inline_copy_btn) {
-                    if (rtl) text_rc.right -= kInlineBtnWidth; else text_rc.left += kInlineBtnWidth;
+                    if (rtl) text_rc.right -= DS(kInlineBtnWidth); else text_rc.left += DS(kInlineBtnWidth);
                 }
 
                 if (item.mushaf_line && g_app->font_line) {
@@ -2843,7 +2925,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 if (item.kind == ListItemKind::SurahHeader) {
                     // إطار مزخرف لاسم السورة: حدّ ذهبي مزدوج كترويسات المصاحف
                     RECT frame = dis->rcItem;
-                    InflateRect(&frame, -kHeaderInsetX, -kHeaderInsetY);
+                    InflateRect(&frame, -DS(kHeaderInsetX), -DS(kHeaderInsetY));
                     frame.bottom = std::max(frame.top + 10, (LONG)frame.bottom);
                     HBRUSH fill = CreateSolidBrush(selected ? pal.selected_bg : pal.paper_bg);
                     FillRect(dis->hDC, &frame, fill);
@@ -2866,8 +2948,8 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                     text_rc = frame;
                     InflateRect(&text_rc, -14, -6);
                 } else {
-                    text_rc.top += (is_ayah && item.seg_index > 0) ? 0 : kRowPadY;
-                    text_rc.bottom -= (is_ayah && item.seg_index + 1 < item.seg_count) ? 0 : kRowPadY;
+                    text_rc.top += (is_ayah && item.seg_index > 0) ? 0 : DS(kRowPadY);
+                    text_rc.bottom -= (is_ayah && item.seg_index + 1 < item.seg_count) ? 0 : DS(kRowPadY);
                 }
 
                 HGDIOBJ old_f = SelectObject(dis->hDC, g_app->font_for_kind(item.kind));
@@ -3141,6 +3223,10 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             g_app->settings.save();
             g_app->update_sidebar_visibility();
             g_app->build_menus();
+            if (g_app->settings.show_sidebar && !g_app->sidebar_visible() && !g_app->focus_mode) {
+                g_app->say(g_app->tr(L"الفهرس الجانبي مفعّل، ويظهر حين تتسع النافذة له",
+                                     L"The side index is on, and appears when the window is wide enough"));
+            }
             return 0;
 
         case IDM_FOCUS_MODE:
@@ -3822,7 +3908,7 @@ static int run_self_test() {
                               DEFAULT_PITCH | FF_DONTCARE, L"KFGQPC HAFS Uthmanic Script");
         HGDIOBJ old = SelectObject(hdc, f);
         const int width = 700;
-        const int max_h = kRowMaxHeight - 2 * kRowPadY;
+        const int max_h = kRowMaxHeight - 2 * DS(kRowPadY);
         const int lh = MushafAppWindow::quran_line_height(hdc);
         auto lines = MushafAppWindow::wrap_text_lines(hdc, dayn.text_qpc_hafs, width);
         // أكثر من صف واحد لازم: كل سطورها لا تتسع لها حدود ارتفاع الصف الواحد
@@ -4010,16 +4096,29 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
 
     DWORD ex_style = app.is_en() ? 0 : WS_EX_LAYOUTRTL;
     // استعادة موضع النافذة وحجمها السابقين إن كانا ما زالا داخل إحدى الشاشات
-    int win_x = CW_USEDEFAULT, win_y = CW_USEDEFAULT, win_w = 1280, win_h = 820;
-    if (app.settings.window_w >= 640 && app.settings.window_h >= 480) {
+    // الحجم الافتراضي بمقاس الشاشة: ١٢٨٠×٨٢٠ عند ١٠٠٪، لا يتجاوز ٩٢٪ من منطقة العمل، وفي وسطها
+    mushaf::ui_dpi() = mushaf::window_dpi(nullptr);
+    MONITORINFO pmi{sizeof(pmi)};
+    POINT origin{0, 0};
+    GetMonitorInfoW(MonitorFromPoint(origin, MONITOR_DEFAULTTOPRIMARY), &pmi);
+    const RECT pw = pmi.rcWork;
+    const int pw_w = pw.right - pw.left, pw_h = pw.bottom - pw.top;
+    int win_w = std::min(mushaf::DS(1280), pw_w * 92 / 100), win_h = std::min(mushaf::DS(820), pw_h * 92 / 100);
+    int win_x = pw.left + (pw_w - win_w) / 2, win_y = pw.top + (pw_h - win_h) / 2;
+    if (app.settings.window_w >= 400 && app.settings.window_h >= 300) {
         RECT saved = {app.settings.window_x, app.settings.window_y,
                       app.settings.window_x + app.settings.window_w,
                       app.settings.window_y + app.settings.window_h};
-        if (MonitorFromRect(&saved, MONITOR_DEFAULTTONULL)) {
-            win_x = saved.left;
-            win_y = saved.top;
-            win_w = app.settings.window_w;
-            win_h = app.settings.window_h;
+        // الموضع المحفوظ يُستعاد فقط إن كان على شاشة موجودة الآن، ويُقصّ على مساحتها
+        // (قد تكون الشاشة تغيّرت: شاشة أصغر، أو فُصلت شاشة ثانية)
+        if (HMONITOR mon = MonitorFromRect(&saved, MONITOR_DEFAULTTONULL)) {
+            MONITORINFO mi{sizeof(mi)};
+            GetMonitorInfoW(mon, &mi);
+            const RECT w = mi.rcWork;
+            win_w = std::min(app.settings.window_w, (int)(w.right - w.left));
+            win_h = std::min(app.settings.window_h, (int)(w.bottom - w.top));
+            win_x = std::max((int)w.left, std::min(app.settings.window_x, (int)w.right - win_w));
+            win_y = std::max((int)w.top, std::min(app.settings.window_y, (int)w.bottom - win_h));
         }
     }
     app.hwnd = CreateWindowExW(
@@ -4035,6 +4134,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
         SendMessageW(app.hwnd, WM_SETICON, ICON_SMALL, (LPARAM)app.app_icon);
     }
 
+    mushaf::ui_dpi() = mushaf::window_dpi(app.hwnd);   // دقة الشاشة التي فُتحت عليها النافذة فعلاً
     app.recreate_fonts_and_brushes();
     app.build_menus();
 
@@ -4127,7 +4227,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
         app.show_units_view(true);
     } else if (app.settings.startup_focus == L"ayahs") {
         SetFocus(app.showing_units ? app.list_units : app.list_ayahs);
-    } else if (app.settings.show_sidebar && !app.focus_mode && IsWindowVisible(app.list_sidebar_index)) {
+    } else if (app.sidebar_visible() && IsWindowVisible(app.list_sidebar_index)) {
         SetFocus(app.list_sidebar_index);
     } else {
         SetFocus(app.showing_units ? app.list_units : app.list_ayahs);

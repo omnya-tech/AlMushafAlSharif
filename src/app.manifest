@@ -16,6 +16,14 @@
       </requestedPrivileges>
     </security>
   </trustInfo>
+  <!-- High DPI: draw sharply at each monitor's own scale (125%, 150%, 200%...) instead of being
+       stretched by Windows. Windows 7/8 use the system scale; Windows 10/11 per monitor. -->
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">true/pm</dpiAware>
+      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor</dpiAwareness>
+    </windowsSettings>
+  </application>
   <compatibility xmlns="urn:schemas-microsoft-com:compatibility.v1">
     <application>
       <supportedOS Id="{35138b9a-5d96-4fbd-8e2d-a2440225f93a}"/> <!-- Windows 7 -->
