@@ -265,6 +265,7 @@ struct AppSettings {
     std::wstring startup_focus = L"surah_index"; // surah_index | ayahs | units
     bool show_sidebar = false;              // الواجهة النظيفة: «تصفح حسب» وقائمة الآيات فقط
     bool show_inline_copy_btn = false;
+    bool show_mushaf_frame = true;   // الإطار المذهّب حول صفحة المصحف (للمبصر، ويُخفى في التباين العالي)
     bool mushaf_lines = true;   // تصفح الصفحات بسطور الطبعة نفسها إن كان لها ملف سطور (كالشمرلي)
     bool show_ayah_letter_count = false;
     int ui_layout_version = 4;
@@ -272,6 +273,7 @@ struct AppSettings {
     bool sr_auto_speak_ayah = true;
     bool sr_phonetic_norm = true;
     bool sr_spell_muqattaat = false;
+    bool sr_speak_waqf = false;        // نطق علامات الوقف بأسمائها (صلى، قلى، ج...) لقارئ الشاشة
     bool sapi_fallback = false;
     int last_surah = 1;
     int last_page = 1;
@@ -383,6 +385,7 @@ struct AppSettings {
         get_bool("show_sidebar", show_sidebar);
         get_bool("show_inline_copy_btn", show_inline_copy_btn);
         get_bool("mushaf_lines", mushaf_lines);
+        get_bool("show_mushaf_frame", show_mushaf_frame);
         get_bool("show_ayah_letter_count", show_ayah_letter_count);
         int layout_ver = 1;
         get_int("ui_layout_version", layout_ver);
@@ -390,6 +393,7 @@ struct AppSettings {
         get_bool("sr_auto_speak_ayah", sr_auto_speak_ayah);
         get_bool("sr_phonetic_norm", sr_phonetic_norm);
         get_bool("sr_spell_muqattaat", sr_spell_muqattaat);
+        get_bool("sr_speak_waqf", sr_speak_waqf);
         get_bool("sapi_fallback", sapi_fallback);
         get_int("last_surah", last_surah);
         get_int("last_page", last_page);
@@ -483,12 +487,14 @@ struct AppSettings {
         oss << "  \"show_sidebar\": " << (show_sidebar ? "true" : "false") << ",\n";
         oss << "  \"show_inline_copy_btn\": " << (show_inline_copy_btn ? "true" : "false") << ",\n";
         oss << "  \"mushaf_lines\": " << (mushaf_lines ? "true" : "false") << ",\n";
+        oss << "  \"show_mushaf_frame\": " << (show_mushaf_frame ? "true" : "false") << ",\n";
         oss << "  \"show_ayah_letter_count\": " << (show_ayah_letter_count ? "true" : "false") << ",\n";
         oss << "  \"ui_layout_version\": " << ui_layout_version << ",\n";
         oss << "  \"page_turn_sound\": " << (page_turn_sound ? "true" : "false") << ",\n";
         oss << "  \"sr_auto_speak_ayah\": " << (sr_auto_speak_ayah ? "true" : "false") << ",\n";
         oss << "  \"sr_phonetic_norm\": " << (sr_phonetic_norm ? "true" : "false") << ",\n";
         oss << "  \"sr_spell_muqattaat\": " << (sr_spell_muqattaat ? "true" : "false") << ",\n";
+        oss << "  \"sr_speak_waqf\": " << (sr_speak_waqf ? "true" : "false") << ",\n";
         oss << "  \"sapi_fallback\": " << (sapi_fallback ? "true" : "false") << ",\n";
         oss << "  \"last_surah\": " << last_surah << ",\n";
         oss << "  \"last_page\": " << last_page << ",\n";

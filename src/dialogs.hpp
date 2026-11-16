@@ -415,6 +415,7 @@ struct OptionsDlgState {
     HWND chk_sr_phonetic = nullptr;
     HWND chk_sr_muqattaat = nullptr;
     HWND chk_sapi = nullptr;
+    HWND chk_sr_waqf = nullptr;
 
     // Tab 3: تخصيص الاختصارات
     std::map<std::wstring, std::wstring> pending_shortcuts;
@@ -659,6 +660,7 @@ static LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             st->settings->sr_phonetic_norm = (SendMessageW(st->chk_sr_phonetic, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->sr_spell_muqattaat = (SendMessageW(st->chk_sr_muqattaat, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->sapi_fallback = (SendMessageW(st->chk_sapi, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            st->settings->sr_speak_waqf = (SendMessageW(st->chk_sr_waqf, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->show_ayah_letter_count = (SendMessageW(st->chk_letter_count, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->custom_shortcuts = st->pending_shortcuts;
 
@@ -860,7 +862,10 @@ inline bool show_options_dialog(
     st.chk_sr_muqattaat = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Spell out the disjointed letters at the start of surahs as letter names (such as الم and كهيعص)" : L"تفكيك الحروف المقطعة في فواتح السور إلى أسمائها ككلمات (مثل: الم ← ألف لام ميم، كهيعص)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 150, 640, 28, dlg, (HMENU)632, hInst, nullptr));
     SendMessageW(st.chk_sr_muqattaat, BM_SETCHECK, settings.sr_spell_muqattaat ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    st.chk_sapi = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Use the built-in Windows voice when no screen reader is running" : L"تشغيل صوت ويندوز المدمج في حال عدم تشغيل قارئ شاشة خارجي", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 190, 640, 28, dlg, (HMENU)633, hInst, nullptr));
+    st.chk_sr_waqf = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Read the pause marks by their names as written in the Mushaf (such as صلى, قلى, ج)" : L"نطق علامات الوقف بأسمائها كما في المصحف (مثل: صلى، قلى، ج، لا)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 190, 640, 28, dlg, (HMENU)634, hInst, nullptr));
+    SendMessageW(st.chk_sr_waqf, BM_SETCHECK, settings.sr_speak_waqf ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    st.chk_sapi = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Use the built-in Windows voice when no screen reader is running" : L"تشغيل صوت ويندوز المدمج في حال عدم تشغيل قارئ شاشة خارجي", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 230, 640, 28, dlg, (HMENU)633, hInst, nullptr));
     SendMessageW(st.chk_sapi, BM_SETCHECK, settings.sapi_fallback ? BST_CHECKED : BST_UNCHECKED, 0);
 
     // ---------------- Tab 3: تخصيص الاختصارات ----------------

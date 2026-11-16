@@ -110,6 +110,7 @@ enum MenuIds : UINT {
     IDM_ALIGN_CENTER     = 1223,
     IDM_ALIGN_RIGHT      = 1224,
     IDM_MUSHAF_LINES     = 1225,
+    IDM_MUSHAF_FRAME     = 1226,
     IDM_CYCLE_THEME      = 1234,
     IDM_TOGGLE_MUQATTAAT = 1240,
     IDM_TOGGLE_SOUND     = 1241,
@@ -233,6 +234,7 @@ public:
     RECT arrow_rect_prev{};        // سهم «السابق» (على اليمين المرئي)
     RECT exit_full_rect{};         // زر ملء الشاشة / الخروج منه (للفأرة فقط)
     RECT close_app_rect{};         // زر إغلاق البرنامج في ملء الشاشة (لا شريط عنوان فيه)
+    RECT frame_rect{};             // الإطار المذهّب حول صفحة المصحف (فارغ إذا أُخفي)
     // العلامات المرسومة لا تظهر إلا حين تتحرك الفأرة، فلا يشغل القارئَ عن القرآن شيء
     bool controls_visible = false;
     POINT last_mouse{-1, -1};
@@ -638,6 +640,8 @@ public:
         AppendMenuW(m_align, MF_STRING | (settings.doc_alignment == L"right" ? MF_CHECKED : 0), IDM_ALIGN_RIGHT,
                     tr(L"محاذاة لليمين", L"Right-aligned").c_str());
         AppendMenuW(m_opts, MF_POPUP, (UINT_PTR)m_align, tr(L"محاذاة السطور", L"Line alignment").c_str());
+        AppendMenuW(m_opts, MF_STRING | (settings.show_mushaf_frame ? MF_CHECKED : 0), IDM_MUSHAF_FRAME,
+                    tr(L"إطار المصحف المذهّب", L"Gilded Mushaf frame").c_str());
         // يظهر مفعّلاً فقط للطبعة التي لها ملف سطور (كالشمرلي)، ويعمل عند التصفح بالصفحة
         AppendMenuW(m_opts, MF_STRING | (settings.mushaf_lines ? MF_CHECKED : 0) |
                     ((db && db->has_edition_lines()) ? 0 : MF_GRAYED), IDM_MUSHAF_LINES,
@@ -1047,7 +1051,8 @@ public:
             is_rub,
             bm,
             is_en(),
-            lcnt
+            lcnt,
+            settings.sr_speak_waqf
         );
     }
 
@@ -1709,6 +1714,63 @@ public:
         DeleteObject(cp);
     }
 
+    // إطار المصحف المذهّب حول الصفحة: خطان ذهبيان بينهما شريط خفيف، ومعيّن صغير في الأركان وأوساط الأضلاع.
+    // ثابت لا يتحرك، ويُرسم في الهامش خارج القائمة فلا يمس النص. يُرسم بالإحداثيات المنطقية لأنه متناظر.
+    void paint_mushaf_frame(HDC hdc) const {
+        if (IsRectEmpty(&frame_rect)) return;
+        const std::wstring th = effective_theme();
+        if (th == L"high_contrast") return;   // التباين العالي للوضوح لا للزخرفة
+        ThemePalette pal = get_theme_palette(th);
+        auto mix = [](COLORREF a, COLORREF b, int pa) {   // pa% من a
+            return RGB((GetRValue(a) * pa + GetRValue(b) * (100 - pa)) / 100,
+                       (GetGValue(a) * pa + GetGValue(b) * (100 - pa)) / 100,
+                       (GetBValue(a) * pa + GetBValue(b) * (100 - pa)) / 100);
+        };
+        const bool dark = (th == L"night_gold");
+        const COLORREF gold = dark ? mix(pal.selected_border, pal.window_bg, 70) : pal.selected_border;
+        const COLORREF band = mix(gold, pal.window_bg, dark ? 14 : 18);
+
+        RECT outer = frame_rect;
+        RECT inner = frame_rect;
+        InflateRect(&inner, -7, -7);
+        // الشريط بين الخطين
+        HBRUSH bb = CreateSolidBrush(band);
+        RECT strips[4] = {{outer.left, outer.top, outer.right, inner.top}, {outer.left, inner.bottom, outer.right, outer.bottom},
+                          {outer.left, inner.top, inner.left, inner.bottom}, {inner.right, inner.top, outer.right, inner.bottom}};
+        for (const RECT& s : strips) FillRect(hdc, &s, bb);
+        DeleteObject(bb);
+        // الخط الخارجي أعرض، والداخلي رفيع
+        HBRUSH gb = CreateSolidBrush(gold);
+        auto frame = [&](RECT r, int t) {
+            RECT e[4] = {{r.left, r.top, r.right, r.top + t}, {r.left, r.bottom - t, r.right, r.bottom},
+                         {r.left, r.top, r.left + t, r.bottom}, {r.right - t, r.top, r.right, r.bottom}};
+            for (const RECT& x : e) FillRect(hdc, &x, gb);
+        };
+        frame(outer, 3);
+        frame(inner, 1);
+        // معيّنات صغيرة: كبيرة في الأركان، وأصغر في أوساط الأضلاع
+        HPEN np = (HPEN)GetStockObject(NULL_PEN);
+        HGDIOBJ op = SelectObject(hdc, np), ob = SelectObject(hdc, gb);
+        auto diamond = [&](int cx, int cy, int r) {
+            POINT p[4] = {{cx, cy - r}, {cx + r, cy}, {cx, cy + r}, {cx - r, cy}};
+            Polygon(hdc, p, 4);
+        };
+        const int ix = (outer.left + inner.left) / 2, iy = (outer.top + inner.top) / 2;
+        const int jx = (outer.right + inner.right) / 2, jy = (outer.bottom + inner.bottom) / 2;
+        for (POINT c : {POINT{ix, iy}, POINT{jx, iy}, POINT{ix, jy}, POINT{jx, jy}}) diamond(c.x, c.y, 8);
+        diamond((ix + jx) / 2, iy, 5);
+        diamond((ix + jx) / 2, jy, 5);
+        diamond(ix, (iy + jy) / 2, 5);
+        diamond(jx, (iy + jy) / 2, 5);
+        // نقطة بلون الورق في قلب معيّنات الأركان
+        HBRUSH pb = CreateSolidBrush(band);
+        SelectObject(hdc, pb);
+        for (POINT c : {POINT{ix, iy}, POINT{jx, iy}, POINT{ix, jy}, POINT{jx, jy}}) diamond(c.x, c.y, 3);
+        SelectObject(hdc, op); SelectObject(hdc, ob);
+        DeleteObject(pb);
+        DeleteObject(gb);
+    }
+
     // زر الخروج من ملء الشاشة: دائرة كالسهمين وفي وسطها علامة ×
     void draw_exit_full(HDC hdc, const RECT& rc, bool hover, bool close_mark = false) const {
         ThemePalette pal = get_theme_palette(effective_theme());
@@ -2097,8 +2159,10 @@ public:
             MoveWindow(lbl_position, px, 12, std::max(0, width - px - 18), 28, TRUE);
         }
 
-        int list_y = tb_h + 10;
-        int list_h = std::max(100, height - list_y - 12);
+        // الإطار المذهّب يحتاج هامشاً يسيراً فوق الصفحة وتحتها (ويظهر فقط إن اتسعت النافذة للسهمين)
+        const bool frame_on = settings.show_mushaf_frame && width >= kArrowMinWindow;
+        int list_y = tb_h + (frame_on ? 24 : 10);
+        int list_h = std::max(100, height - list_y - (frame_on ? 24 : 12));
 
         bool sb_vis = settings.show_sidebar && !focus_mode;
         int sb_w = sb_vis ? 330 : 0;
@@ -2154,6 +2218,13 @@ public:
         if (focus_mode) close_app_rect = {lx, list_y, lx + kArrowDiameter, list_y + kArrowDiameter};
         else SetRectEmpty(&close_app_rect);
         invalidate_nav_arrows();
+
+        if (frame_on) {
+            frame_rect = {page_x - 16, list_y - 16, page_x + page_w + 16, list_y + list_h + 16};
+        } else {
+            SetRectEmpty(&frame_rect);
+        }
+        InvalidateRect(hwnd, nullptr, TRUE);
 
         MoveWindow(list_units, page_x, list_y, page_w, list_h, TRUE);
         MoveWindow(list_ayahs, page_x, list_y, page_w, list_h, TRUE);
@@ -2569,6 +2640,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             FillRect(hdc, &line, gold);
             DeleteObject(gold);
         }
+        g_app->paint_mushaf_frame(hdc);
         g_app->paint_nav_arrows(hdc);
         return 1;
     }
@@ -3516,6 +3588,15 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                                              : g_app->tr(L"توسيط السطور كالمصحف", L"Lines centered like a Mushaf"));
             return 0;
 
+        case IDM_MUSHAF_FRAME:
+            g_app->settings.show_mushaf_frame = !g_app->settings.show_mushaf_frame;
+            g_app->settings.save();
+            g_app->build_menus();
+            g_app->update_sidebar_visibility();   // يعيد التخطيط والرسم
+            g_app->say(g_app->settings.show_mushaf_frame ? g_app->tr(L"إظهار إطار المصحف", L"Mushaf frame shown")
+                                                         : g_app->tr(L"إخفاء إطار المصحف", L"Mushaf frame hidden"));
+            return 0;
+
         case IDM_MUSHAF_LINES:
             g_app->settings.mushaf_lines = !g_app->settings.mushaf_lines;
             g_app->settings.save();
@@ -3669,6 +3750,20 @@ static int run_self_test() {
     SELFTEST_CHECK(app.db->get_ayah(2, 1, alm));
     SELFTEST_CHECK(prepare_ayah_for_screen_reader(alm, true, false) == L"الم");
     SELFTEST_CHECK(prepare_ayah_for_screen_reader(alm, true, true) == L"أَلِفْ لَامْ مِيمْ");
+
+    // علامات الوقف: مُسقطة افتراضياً، وتُنطق بأسمائها عند تفعيل الخيار (البقرة ٢: لا ريب ۛ فيه ۛ)
+    {
+        AyahInfo b2;
+        SELFTEST_CHECK(app.db->get_ayah(2, 2, b2));
+        std::wstring plain = prepare_ayah_for_screen_reader(b2, true, false, false);
+        std::wstring named = prepare_ayah_for_screen_reader(b2, true, false, true);
+        SELFTEST_CHECK(plain.find(L"تعانق") == std::wstring::npos);
+        SELFTEST_CHECK(named.find(L"رَيْبَ (تعانق) فِيهِ (تعانق)") != std::wstring::npos);
+        // السين الصغيرة داخل كلمة تنبيه على النطق لا علامة وقف (البقرة ٢٤٥: وَيَبْصُۜطُ)
+        AyahInfo b245;
+        SELFTEST_CHECK(app.db->get_ayah(2, 245, b245));
+        SELFTEST_CHECK(prepare_ayah_for_screen_reader(b245, true, false, true).find(L"(س)") == std::wstring::npos);
+    }
 
     AyahInfo a26, a75, a142;
     SELFTEST_CHECK(app.db->get_ayah(2, 26, a26));
@@ -3994,13 +4089,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
     );
 
     // 3) منطقة المصحف (مكدس قائمة الوحدات وقائمة الآيات)
+    // بلا حافة ثلاثية الأبعاد: حدود الصفحة يرسمها الإطار المذهّب، والحافة الفاتحة كانت تزاحمه في المظهر الليلي
     app.list_units = CreateWindowExW(
-        WS_EX_CLIENTEDGE, L"LISTBOX", L"",
+        0, L"LISTBOX", L"",
         WS_CHILD | WS_TABSTOP | WS_VSCROLL | LBS_NOTIFY | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT,
         354, 54, 914, 720, app.hwnd, (HMENU)mushaf::ID_LIST_UNITS, hInstance, nullptr
     );
     app.list_ayahs = CreateWindowExW(
-        WS_EX_CLIENTEDGE, L"LISTBOX", L"",
+        0, L"LISTBOX", L"",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | WS_VSCROLL | LBS_NOTIFY | LBS_OWNERDRAWVARIABLE | LBS_HASSTRINGS | LBS_NOINTEGRALHEIGHT,
         354, 54, 914, 720, app.hwnd, (HMENU)mushaf::ID_LIST_AYAHS, hInstance, nullptr
     );

@@ -107,12 +107,41 @@ inline std::wstring clean_muqattaat_word(const std::wstring& w) {
     return out;
 }
 
+// اسم علامة الوقف كما تُكتب في المصحف، يُنطق بين قوسين حتى لا تلتبس «لا» العلامة بـ«لا» الكلمة
+inline const wchar_t* waqf_mark_name(wchar_t c) {
+    switch (c) {
+    case 0x06D6: return L"صلى";
+    case 0x06D7: return L"قلى";
+    case 0x06DA: return L"ج";
+    case 0x06D8: return L"م";
+    case 0x06D9: return L"لا";
+    case 0x06DB: return L"تعانق";
+    case 0x06DC: return L"س";
+    default: return nullptr;
+    }
+}
+
+// علامات الوقف المنفصلة («رَيْبَ ۛ فِيهِ») تُستبدل بأسمائها؛ والسين الصغيرة داخل الكلمة (تنبيه على النطق) تُحذف
+inline std::wstring speak_waqf_marks(const std::wstring& text) {
+    std::wstring out;
+    const size_t n = text.size();
+    for (size_t i = 0; i < n; ++i) {
+        wchar_t c = text[i];
+        const wchar_t* name = waqf_mark_name(c);
+        if (!name) { out.push_back(c); continue; }
+        bool alone = (i == 0 || text[i - 1] == L' ') && (i + 1 >= n || text[i + 1] == L' ');
+        if (alone) { out += L"("; out += name; out += L")"; }
+    }
+    return out;
+}
+
 inline std::wstring prepare_ayah_for_screen_reader(
     const AyahInfo& ayah,
     bool phonetic_norm = true,
-    bool spell_muqattaat = false
+    bool spell_muqattaat = false,
+    bool speak_waqf = false
 ) {
-    if (!phonetic_norm) return ayah.text_uthmani;
+    if (!phonetic_norm) return speak_waqf ? speak_waqf_marks(ayah.text_uthmani) : ayah.text_uthmani;
 
     static const std::map<std::wstring, std::wstring> muqattaat = {
         {L"الم", L"أَلِفْ لَامْ مِيمْ"},
@@ -131,7 +160,7 @@ inline std::wstring prepare_ayah_for_screen_reader(
         {L"ن", L"نُونْ"},
     };
 
-    std::wstring text = ayah.text_imlaei;
+    std::wstring text = speak_waqf ? speak_waqf_marks(ayah.text_imlaei) : ayah.text_imlaei;
     for (wchar_t& c : text) {
         if ((c >= 0x06D6 && c <= 0x06ED) || c == 0x06DD || c == 0x06DE) c = L' ';
     }
@@ -213,9 +242,10 @@ inline std::wstring build_ayah_accessible_name(
     bool is_rub_start,
     const std::wstring& bookmark_spoken,
     bool en = false,
-    int letter_count = 0
+    int letter_count = 0,
+    bool speak_waqf = false
 ) {
-    std::wstring spoken = prepare_ayah_for_screen_reader(ayah, phonetic_norm, spell_muqattaat);
+    std::wstring spoken = prepare_ayah_for_screen_reader(ayah, phonetic_norm, spell_muqattaat, speak_waqf);
     std::wstring tail;
     if (display_mode == L"text") {
         tail = L"";
