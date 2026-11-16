@@ -81,6 +81,7 @@ Free to use, copy and distribute unchanged; not for sale. Full terms in Arabic a
 | خط حفص العثماني — مجمع الملك فهد (`UthmanicHafs1Ver18.ttf`) | اتفاقية مجمع الملك فهد: الاستخدام والنسخ والتوزيع مجاناً، ويُمنع بيعه أو تعديله ([`LICENSE-KFGQPC.txt`](assets/fonts/LICENSE-KFGQPC.txt)) |
 | أميري وأميري قرآن | SIL Open Font License 1.1 ([`OFL-Amiri.txt`](assets/fonts/OFL-Amiri.txt)) |
 | شهرزاد الجديد | SIL Open Font License 1.1 ([`OFL-ScheherazadeNew.txt`](assets/fonts/OFL-ScheherazadeNew.txt)) |
+| كتاب (Kitab) | SIL Open Font License 1.1 ([`OFL-Kitab.txt`](assets/fonts/OFL-Kitab.txt)) — [المصدر](https://github.com/quranacademy/kitab-font) |
 
 تُوزَّع الخطوط كما هي دون أي تعديل، ونص كل رخصة مرفق معها في `assets/fonts/`.
 صوت تقليب الصفحة من OpenGameArt برخصة CC0 (التفاصيل في `assets/sounds/CREDITS.txt`).

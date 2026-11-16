@@ -356,6 +356,8 @@ public:
             L"Amiri-Bold.ttf",
             L"ScheherazadeNew-Regular.ttf",
             L"ScheherazadeNew-Bold.ttf",
+            L"Kitab-Regular.ttf",
+            L"Kitab-Bold.ttf",
         };
         for (const auto& f : fonts) {
             std::wstring p = assets_dir + L"\\fonts\\" + f;
@@ -3262,7 +3264,8 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
 
         case IDM_OPTIONS: {
             std::wstring lang_before = g_app->settings.ui_language;
-            if (show_options_dialog(hwnd, g_app->settings, g_app->focused_ayah(), g_app->is_en(), g_app->font_ui)) {
+            if (show_options_dialog(hwnd, g_app->settings, g_app->focused_ayah(), g_app->is_en(), g_app->font_ui,
+                                    g_app->db ? g_app->db->page_count() : 604)) {
                 if (g_app->settings.ui_language != lang_before) {
                     g_app->relaunch_for_language();
                     return 0;
@@ -3963,6 +3966,27 @@ static int run_self_test() {
     // وأن يبقى نصها كاملاً بلا نقص ولا زيادة بعد التقسيم.
     {
         app.load_private_fonts();
+
+        // خط «كتاب»: يُحمَّل مع البرنامج، وفيه كل حروف آية الكرسي وعلاماتها بالرسم العثماني
+        {
+            AyahInfo kursi;
+            SELFTEST_CHECK(app.db->get_ayah(2, 255, kursi));
+            HDC kdc = CreateCompatibleDC(nullptr);
+            HFONT kf = CreateFontW(-32, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                                   CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Kitab");
+            HGDIOBJ kold = SelectObject(kdc, kf);
+            wchar_t face[LF_FACESIZE] = {0};
+            GetTextFaceW(kdc, LF_FACESIZE, face);
+            SELFTEST_CHECK(std::wstring(face) == L"Kitab");
+            std::vector<WORD> gi(kursi.text_uthmani.size());
+            DWORD n = GetGlyphIndicesW(kdc, kursi.text_uthmani.c_str(), (int)kursi.text_uthmani.size(), gi.data(),
+                                       GGI_MARK_NONEXISTING_GLYPHS);
+            SELFTEST_CHECK(n == kursi.text_uthmani.size() && std::find(gi.begin(), gi.end(), (WORD)0xFFFF) == gi.end());
+            SelectObject(kdc, kold);
+            DeleteObject(kf);
+            DeleteDC(kdc);
+        }
+
         AyahInfo dayn;
         SELFTEST_CHECK(app.db->get_ayah(2, 282, dayn));
         HDC hdc = CreateCompatibleDC(nullptr);
@@ -3997,6 +4021,44 @@ static int run_self_test() {
 
         // الآية القصيرة تبقى صفاً واحداً
         SELFTEST_CHECK(MushafAppWindow::wrap_text_lines(hdc, alm.text_qpc_hafs, width).size() == 1);
+
+        // آية الدَّين بكل خط قرآني وبأكبر حجم (٥٢) على شاشة عادية وعالية الدقة (٢٠٠٪) وفي نافذة ضيقة:
+        // سطر واحد يتسع لصفه دائماً، ولا يضيع من النص شيء ولا يتجاوز سطرٌ عرضه
+        {
+            const wchar_t* families[] = {L"KFGQPC HAFS Uthmanic Script", L"Amiri Quran", L"Amiri",
+                                         L"Scheherazade New", L"Kitab"};
+            for (const wchar_t* fam : families) {
+                const std::wstring& txt = std::wstring(fam).find(L"KFGQPC") != std::wstring::npos
+                                              ? dayn.text_qpc_hafs : dayn.text_uthmani;
+                std::wstring want;
+                for (wchar_t ch : txt) {
+                    if (ch == L' ' && !want.empty() && want.back() == L' ') continue;
+                    want.push_back(ch);
+                }
+                while (!want.empty() && want.back() == L' ') want.pop_back();
+                while (!want.empty() && want.front() == L' ') want.erase(want.begin());
+                for (int dpi : {96, 192}) {
+                    HFONT big = MushafAppWindow::create_quran_font(-MulDiv(52, dpi, 72), fam);
+                    HGDIOBJ prev = SelectObject(hdc, big);
+                    const int blh = MushafAppWindow::quran_line_height(hdc);
+                    SELFTEST_CHECK(blh > 0 && blh <= max_h);
+                    for (int w : {700, 380}) {
+                        auto blines = MushafAppWindow::wrap_text_lines(hdc, txt, w);
+                        std::wstring got;
+                        for (const auto& ln : blines) {
+                            SIZE sz{};
+                            GetTextExtentPoint32W(hdc, ln.c_str(), (int)ln.size(), &sz);
+                            SELFTEST_CHECK(sz.cx <= w + 4 || ln.find(L' ') == std::wstring::npos);
+                            if (!got.empty()) got += L" ";
+                            got += ln;
+                        }
+                        SELFTEST_CHECK(got == want);
+                    }
+                    SelectObject(hdc, prev);
+                    DeleteObject(big);
+                }
+            }
+        }
 
         // السهم لأسفل في آخر آية لا يتحرك (فلا يعيد قارئ الشاشة قراءتها)، ولو كانت مقسّمة على صفوف
         {
@@ -4041,6 +4103,18 @@ static int run_self_test() {
         SELFTEST_CHECK(app.db->get_ayah(2, 255, k2) && k2.page_number == 42);
         SELFTEST_CHECK(app.db->set_edition(L"madinah") == L"madinah");
         SELFTEST_CHECK(app.db->set_edition(L"no-such-print") == L"madinah");
+
+        // طبعة دار المعارف المرفقة: ٤٨٥ صفحة، الصفحة ٣٨ تبدأ بالآية ٣ من آل عمران، والأخيرة بالإخلاص
+        app.db->load_editions_folder(app.assets_dir + L"\\data\\editions");
+        if (app.db->set_edition(L"dar_almaarif") == L"dar_almaarif") {
+            SELFTEST_CHECK(app.db->page_count() == 485);
+            AyahInfo d1;
+            SELFTEST_CHECK(app.db->get_ayah(3, 3, d1) && d1.page_number == 38);
+            SELFTEST_CHECK(app.db->get_ayah(114, 6, d1) && d1.page_number == 485);
+            SELFTEST_CHECK(app.db->set_edition(L"madinah") == L"madinah");
+        } else {
+            SELFTEST_CHECK(false && "dar_almaarif edition did not load");
+        }
 
         // أخطاء يجب أن تُكتشف: صفحة مكررة، وآية غير موجودة، وسورة غير معروفة، وترتيب معكوس
         EditionCheck bad1 = app.db->check_edition_text("1,1,1\n2,2,1\n2,2,6\n");

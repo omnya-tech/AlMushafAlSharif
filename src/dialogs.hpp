@@ -636,11 +636,11 @@ static LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             st->settings->copy_reference = (SendMessageW(st->chk_reference, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->copy_arabic_digits = (SendMessageW(st->chk_arabic_digits, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
-            static const wchar_t* fonts[4] = {
-                L"KFGQPC HAFS Uthmanic Script", L"Amiri Quran", L"Amiri", L"Scheherazade New"
+            static const wchar_t* fonts[5] = {
+                L"KFGQPC HAFS Uthmanic Script", L"Amiri Quran", L"Amiri", L"Scheherazade New", L"Kitab"
             };
             int fn = (int)SendMessageW(st->combo_font, CB_GETCURSEL, 0, 0);
-            st->settings->quran_font_family = (fn >= 0 && fn < 4) ? fonts[fn] : fonts[0];
+            st->settings->quran_font_family = (fn >= 0 && fn < 5) ? fonts[fn] : fonts[0];
 
             wchar_t sz_buf[32] = {0};
             GetWindowTextW(st->edit_font_size, sz_buf, 31);
@@ -689,7 +689,8 @@ inline bool show_options_dialog(
     AppSettings& settings,
     const AyahInfo* sample_ayah,
     bool is_en,
-    HFONT ui_font
+    HFONT ui_font,
+    int page_count = 604
 ) {
     static bool reg = false;
     if (!reg) {
@@ -749,8 +750,12 @@ inline bool show_options_dialog(
 
     add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Default browse by:" : L"طريقة التصفح:", WS_CHILD | WS_VISIBLE, 32, 60, 210, 26, dlg, nullptr, hInst, nullptr));
     st.combo_browse = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, 250, 56, 430, 240, dlg, (HMENU)602, hInst, nullptr));
-    const wchar_t* bm_ar[7] = {L"السور (١١٤ سورة)", L"الصفحات (٦٠٤ صفحات)", L"الأجزاء (٣٠ جزءاً)", L"الأحزاب (٦٠ حزباً)", L"الأرباع (٢٤٠ ربعاً)", L"المنازل السبعة (ختمة الأسبوع)", L"الركوعات (٥٥٨ ركوعاً)"};
-    const wchar_t* bm_en[7] = {L"Surahs (114)", L"Pages (604)", L"Juz (30)", L"Hizb (60)", L"Quarters (240)", L"Seven Manzils (weekly reading)", L"Rukus (558)"};
+    // عدد الصفحات بحسب الطبعة المختارة (المدينة ٦٠٤، ودار المعارف ٤٨٥)
+    int pr = page_count % 100;
+    std::wstring pages_ar_lbl = L"الصفحات (" + to_arabic_digits(page_count) + ((pr >= 3 && pr <= 10) ? L" صفحات)" : L" صفحة)");
+    std::wstring pages_en_lbl = L"Pages (" + std::to_wstring(page_count) + L")";
+    const wchar_t* bm_ar[7] = {L"السور (١١٤ سورة)", pages_ar_lbl.c_str(), L"الأجزاء (٣٠ جزءاً)", L"الأحزاب (٦٠ حزباً)", L"الأرباع (٢٤٠ ربعاً)", L"المنازل السبعة (ختمة الأسبوع)", L"الركوعات (٥٥٨ ركوعاً)"};
+    const wchar_t* bm_en[7] = {L"Surahs (114)", pages_en_lbl.c_str(), L"Juz (30)", L"Hizb (60)", L"Quarters (240)", L"Seven Manzils (weekly reading)", L"Rukus (558)"};
     const wchar_t* bm_keys[7] = {L"surah", L"page", L"juz", L"hizb", L"rub", L"manzil", L"ruku"};
     int bm_sel = 0;
     for (int i = 0; i < 7; ++i) {
@@ -818,11 +823,11 @@ inline bool show_options_dialog(
 
     add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Quran font:" : L"الخط القرآني:", WS_CHILD, 32, 118, 210, 26, dlg, nullptr, hInst, nullptr));
     st.combo_font = add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_TABSTOP | CBS_DROPDOWNLIST, 250, 114, 430, 200, dlg, (HMENU)620, hInst, nullptr));
-    const wchar_t* fn_ar[4] = {L"خط حفص العثماني — مجمع الملك فهد (طبعة المدينة)", L"الخط الأميري القرآني", L"خط أميري الكلاسيكي", L"خط شهرزاد القرآني الجديد"};
-    const wchar_t* fn_en[4] = {L"KFGQPC HAFS Uthmanic Script (Madinah)", L"Amiri Quran", L"Amiri Classic", L"Scheherazade New"};
-    const wchar_t* fn_keys[4] = {L"KFGQPC HAFS Uthmanic Script", L"Amiri Quran", L"Amiri", L"Scheherazade New"};
+    const wchar_t* fn_ar[5] = {L"خط حفص العثماني — مجمع الملك فهد (طبعة المدينة)", L"الخط الأميري القرآني", L"خط أميري الكلاسيكي", L"خط شهرزاد القرآني الجديد", L"خط كتاب (نسخ المطابع)"};
+    const wchar_t* fn_en[5] = {L"KFGQPC HAFS Uthmanic Script (Madinah)", L"Amiri Quran", L"Amiri Classic", L"Scheherazade New", L"Kitab (classic print Naskh)"};
+    const wchar_t* fn_keys[5] = {L"KFGQPC HAFS Uthmanic Script", L"Amiri Quran", L"Amiri", L"Scheherazade New", L"Kitab"};
     int fn_sel = 0;
-    for (int i = 0; i < 4; ++i) {
+    for (int i = 0; i < 5; ++i) {
         SendMessageW(st.combo_font, CB_ADDSTRING, 0, (LPARAM)(is_en ? fn_en[i] : fn_ar[i]));
         if (settings.quran_font_family == fn_keys[i]) fn_sel = i;
     }
