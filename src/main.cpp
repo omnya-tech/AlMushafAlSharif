@@ -120,6 +120,7 @@ enum MenuIds : UINT {
     // 4) قائمة المساعدة
     IDM_SHORTCUTS_HELP   = 1301,
     IDM_ABOUT            = 1302,
+    IDM_USER_GUIDE       = 1303,
 };
 
 enum class ListItemKind {
@@ -664,6 +665,7 @@ public:
 
         // 3) المساعدة
         HMENU m_help = CreatePopupMenu();
+        AppendMenuW(m_help, MF_STRING, IDM_USER_GUIDE,     tr(L"دليل استخدام البرنامج...", L"User guide (in Arabic)...").c_str());
         AppendMenuW(m_help, MF_STRING, IDM_SHORTCUTS_HELP, lbl(L"دليل اختصارات لوحة المفاتيح وقارئات الشاشة...", L"Keyboard and screen reader guide...", IDM_SHORTCUTS_HELP).c_str());
         AppendMenuW(m_help, MF_STRING, IDM_ABOUT,          tr(L"حول برنامج المصحف الشريف...", L"About Al-Mushaf Al-Sharif...").c_str());
         AppendMenuW(mb, MF_POPUP, (UINT_PTR)m_help,        tr(L"الم&ساعدة", L"&Help").c_str());
@@ -1436,6 +1438,14 @@ public:
         InvalidateRect(list_ayahs, nullptr, TRUE);
     }
 
+    // أول صف لعنصر تالٍ (آية أو ترويسة) بعد الصف sel، أو -1 إن كان sel في آخر عنصر بالقائمة
+    static int next_item_start_row(const std::vector<AyahListItemData>& items, int sel) {
+        for (int i = std::max(0, sel + 1); i < (int)items.size(); ++i) {
+            if (items[i].seg_index == 0) return i;
+        }
+        return -1;
+    }
+
     // بعد أي حركة بالأسهم أو بالفأرة: إن وقع التحديد على صف تكميلي من آية مقسّمة
     // نكمل الحركة بمفاتيح القائمة نفسها حتى يقف على أول صف لآية، فيبقى نطق قارئ الشاشة طبيعياً.
     void snap_ayah_selection(bool forward) {
@@ -2095,6 +2105,49 @@ public:
         load_current_browse_unit(ay, s);
     }
 
+    // دليل الاستخدام: صفحة HTML مع البرنامج تفتح في المتصفح الافتراضي
+    std::wstring user_guide_path() const { return assets_dir + L"\\docs\\guide_ar.html"; }
+
+    bool open_user_guide() {
+        const std::wstring path = user_guide_path();
+        if (GetFileAttributesW(path.c_str()) == INVALID_FILE_ATTRIBUTES) {
+            MessageBoxW(hwnd, tr(L"تعذّر العثور على ملف دليل الاستخدام. أعد تثبيت البرنامج لاستعادته.",
+                                 L"The user guide file could not be found. Reinstall the program to restore it.").c_str(),
+                        tr(L"دليل الاستخدام", L"User guide").c_str(),
+                        MB_OK | MB_ICONWARNING | (is_en() ? 0 : MB_RTLREADING | MB_RIGHT));
+            return false;
+        }
+        return (INT_PTR)ShellExecuteW(hwnd, L"open", path.c_str(), nullptr, nullptr, SW_SHOWNORMAL) > 32;
+    }
+
+    // بعد التثبيت، مرة واحدة: سؤال بنعم أو لا عن فتح الدليل. العلامة في السجل لا في ملف الإعدادات،
+    // فلا يتكرر السؤال إن حُذفت الإعدادات، ويعود بعد إزالة البرنامج وتثبيته من جديد (المثبّت يحذف المفتاح)
+    void offer_user_guide_once() {
+        if (is_en()) return;   // الدليل بالعربية؛ يُعرض حين تكون الواجهة عربية
+        if (GetFileAttributesW(user_guide_path().c_str()) == INVALID_FILE_ATTRIBUTES) return;
+        HKEY hk = nullptr;
+        if (RegCreateKeyExW(HKEY_CURRENT_USER, L"Software\\AlMushafAlSharif", 0, nullptr, 0,
+                            KEY_QUERY_VALUE | KEY_SET_VALUE, nullptr, &hk, nullptr) != ERROR_SUCCESS) return;
+        DWORD done = 0, cb = sizeof(done);
+        bool offered = RegQueryValueExW(hk, L"GuideOffered", nullptr, nullptr, (LPBYTE)&done, &cb) == ERROR_SUCCESS && done;
+        if (!offered) {
+            done = 1;
+            RegSetValueExW(hk, L"GuideOffered", 0, REG_DWORD, (const BYTE*)&done, sizeof(done));
+        }
+        RegCloseKey(hk);
+        if (offered) return;
+
+        HWND prev_focus = GetFocus();
+        int r = MessageBoxW(hwnd,
+            L"مرحبًا بك في برنامج المصحف الشريف.\n\n"
+            L"هل تودّ الاطلاع على دليل الاستخدام؟ يشرح الدليل أقسام البرنامج، وتقسيمات المصحف، "
+            L"وطرق التصفح والبحث والنسخ، واختصارات لوحة المفاتيح.\n\n"
+            L"ويمكنك الرجوع إليه متى شئت من قائمة «المساعدة».",
+            L"المصحف الشريف", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON1 | MB_RTLREADING | MB_RIGHT);
+        if (prev_focus && IsWindow(prev_focus)) SetFocus(prev_focus);
+        if (r == IDYES) open_user_guide();
+    }
+
     void announce_quick_info() {
         const AyahInfo* a = focused_ayah();
         if (!a) return;
@@ -2516,6 +2569,12 @@ static LRESULT CALLBACK AyahListSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
         if (wParam == VK_F6) {
             g_app->cycle_landmarks_f6();
             return 0;
+        }
+        if (wParam == VK_DOWN || wParam == VK_END) {
+            // في آخر آية بالصفحة أو السورة أو الجزء لا حركة: لو تركنا القائمة تنزل إلى صفها التكميلي
+            // ثم أرجعناها لأول صف، لأعاد قارئ الشاشة قراءة الآية نفسها مع كل ضغطة سهم
+            int sel = (int)SendMessageW(hwnd, LB_GETCURSEL, 0, 0);
+            if (sel >= 0 && MushafAppWindow::next_item_start_row(g_app->ayah_items, sel) < 0) return 0;
         }
         if (wParam == VK_DOWN || wParam == VK_UP || wParam == VK_HOME || wParam == VK_END) {
             LRESULT r = CallWindowProcW(g_orig_ayah_list_proc, hwnd, msg, wParam, lParam);
@@ -3724,6 +3783,10 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             return 0;
         }
 
+        case IDM_USER_GUIDE:
+            g_app->open_user_guide();
+            return 0;
+
         case IDM_ABOUT: {
             // آية الحفظ تُقرأ من قاعدة البيانات نفسها حتى يطابق رسمها المصحف حرفاً بحرف
             AyahInfo hifz;
@@ -3934,6 +3997,20 @@ static int run_self_test() {
 
         // الآية القصيرة تبقى صفاً واحداً
         SELFTEST_CHECK(MushafAppWindow::wrap_text_lines(hdc, alm.text_qpc_hafs, width).size() == 1);
+
+        // السهم لأسفل في آخر آية لا يتحرك (فلا يعيد قارئ الشاشة قراءتها)، ولو كانت مقسّمة على صفوف
+        {
+            std::vector<AyahListItemData> rows(6);
+            const int segs[] = {0, 0, 1, 0, 1, 2};   // ترويسة، آية من صفين، آية أخيرة من ثلاثة صفوف
+            for (int i = 0; i < 6; ++i) rows[i].seg_index = segs[i];
+            SELFTEST_CHECK(MushafAppWindow::next_item_start_row(rows, 0) == 1);
+            SELFTEST_CHECK(MushafAppWindow::next_item_start_row(rows, 1) == 3);
+            SELFTEST_CHECK(MushafAppWindow::next_item_start_row(rows, 3) == -1);
+            SELFTEST_CHECK(MushafAppWindow::next_item_start_row(rows, 5) == -1);
+            rows.resize(4);   // آية أخيرة من صف واحد
+            SELFTEST_CHECK(MushafAppWindow::next_item_start_row(rows, 3) == -1);
+            SELFTEST_CHECK(MushafAppWindow::next_item_start_row(rows, 1) == 3);
+        }
         SelectObject(hdc, old);
         DeleteObject(f);
         DeleteDC(hdc);
@@ -3979,12 +4056,36 @@ static int run_self_test() {
         SELFTEST_CHECK(ar.page_starts.size() == 2 && ar.errors.size() == 1);   // سليم لكنه ناقص (صفحتان فقط)
     }
 
+    // دليل الاستخدام موجود مع البرنامج، وفيه كل اختصار أصلي حتى لا يتأخر الدليل عن البرنامج
+    {
+        const std::wstring guide = app.user_guide_path();
+        std::string raw;
+        if (FILE* f = _wfopen(guide.c_str(), L"rb")) {
+            char buf[8192];
+            size_t n;
+            while ((n = std::fread(buf, 1, sizeof(buf), f)) > 0) raw.append(buf, n);
+            std::fclose(f);
+        }
+        SELFTEST_CHECK(raw.size() > 10000);
+        const std::wstring html = to_wide(raw);
+        SELFTEST_CHECK(html.find(L"lang=\"ar\" dir=\"rtl\"") != std::wstring::npos);
+        SELFTEST_CHECK(html.find(L"{{") == std::wstring::npos);   // لا عناصر نائبة لم تُملأ
+        for (const auto& d : shortcut_defs()) {
+            std::wstring spec = d.default_spec;
+            replace_all(spec, L"Left", L"\u2190");
+            replace_all(spec, L"Right", L"\u2192");
+            const bool listed = html.find(L"<kbd>" + spec + L"</kbd>") != std::wstring::npos;
+            if (!listed) std::fwprintf(stderr, L"guide is missing shortcut: %ls\n", spec.c_str());
+            SELFTEST_CHECK(listed);
+        }
+    }
+
     if (g_selftest_failures > 0) {
         std::fprintf(stderr, "%d SELF-TEST CHECK(S) FAILED\n", g_selftest_failures);
         return 1;
     }
     std::printf("ALL C++ SELF-TESTS PASSED (6236 ayahs, 114 surahs, Madinah 604 pages, 7 browse modes, "
-                "558 rukus, long-ayah row splitting, divisions, shortcuts & screen reader)\n");
+                "558 rukus, long-ayah row splitting, list-end arrows, user guide, divisions, shortcuts & screen reader)\n");
     return 0;
 }
 
@@ -4232,6 +4333,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
     } else {
         SetFocus(app.showing_units ? app.list_units : app.list_ayahs);
     }
+
+    app.offer_user_guide_once();
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {

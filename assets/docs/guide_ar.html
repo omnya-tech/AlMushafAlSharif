@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دليل استخدام المصحف الشريف</title>
+<style>
+  @font-face { font-family: "Amiri"; src: url("../fonts/Amiri-Regular.ttf"); font-weight: 400; }
+  @font-face { font-family: "Amiri"; src: url("../fonts/Amiri-Bold.ttf"); font-weight: 700; }
+  @font-face { font-family: "Amiri Quran"; src: url("../fonts/AmiriQuran-Regular.ttf"); }
+
+  :root {
+    --paper: #fbf6ea;
+    --page: #fffdf6;
+    --ink: #2b2418;
+    --muted: #5e5340;
+    --gold: #a8812c;
+    --gold-soft: #e9d9ae;
+    --green: #1f5a43;
+    --key-bg: #f3ead3;
+    --rule: #dcc99a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #16130d;
+      --page: #1f1b13;
+      --ink: #efe6d2;
+      --muted: #c9bc9d;
+      --gold: #d4ad57;
+      --gold-soft: #4a3c1d;
+      --green: #8fd0b0;
+      --key-bg: #2c2618;
+      --rule: #5a4a25;
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html { font-size: 112.5%; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: "Amiri", "Traditional Arabic", "Segoe UI", Tahoma, serif;
+    line-height: 1.95;
+  }
+  .skip {
+    position: absolute; right: 1rem; top: -4rem;
+    background: var(--green); color: #fff; padding: .4rem 1rem; border-radius: 6px; z-index: 10;
+  }
+  .skip:focus { top: 1rem; }
+
+  .book {
+    max-width: 52rem;
+    margin: 2rem auto;
+    padding: 2.5rem clamp(1rem, 4vw, 3.5rem) 3rem;
+    background: var(--page);
+    border: 3px double var(--gold);
+    outline: 1px solid var(--gold-soft);
+    outline-offset: 6px;
+    border-radius: 4px;
+  }
+  @media (max-width: 40rem) {
+    .book { margin: 0; border-width: 0 0 3px; outline: none; }
+  }
+
+  header.title { text-align: center; padding-bottom: 1.2rem; border-bottom: 1px solid var(--rule); }
+  header.title h1 {
+    font-size: 2.3rem; color: var(--green); margin: .2rem 0 .3rem; font-weight: 700;
+  }
+  header.title .sub { color: var(--muted); margin: 0; }
+  .ornament { color: var(--gold); letter-spacing: .6rem; font-size: 1.1rem; }
+
+  blockquote.ayah {
+    margin: 1.6rem auto; text-align: center;
+    font-family: "Amiri Quran", "Amiri", serif; font-size: 1.55rem; line-height: 2.4;
+    color: var(--green);
+  }
+  blockquote.ayah cite { display: block; font-family: "Amiri", serif; font-size: 1rem; color: var(--muted); font-style: normal; }
+
+  nav.toc { margin: 1.5rem 0 2rem; padding: 1rem 1.4rem; border: 1px solid var(--rule); border-radius: 6px; }
+  nav.toc h2 { margin: 0 0 .5rem; font-size: 1.3rem; border: 0; padding: 0; }
+  nav.toc ol { margin: 0; padding-right: 1.4rem; columns: 2 16rem; column-gap: 2rem; }
+  nav.toc li { break-inside: avoid; }
+  nav.toc ol { list-style-type: arabic-indic; }
+
+  h2 {
+    font-size: 1.65rem; color: var(--green); margin: 2.6rem 0 .8rem;
+    padding-bottom: .35rem; border-bottom: 1px solid var(--rule);
+  }
+  h2::before { content: "۞ "; color: var(--gold); font-weight: 400; }
+  h3 { font-size: 1.25rem; color: var(--ink); margin: 1.6rem 0 .4rem; }
+  p.lead { color: var(--muted); margin-top: 0; }
+
+  a { color: var(--green); text-underline-offset: 3px; }
+  a:focus-visible, .skip:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+
+  kbd {
+    font-family: "Segoe UI", Tahoma, sans-serif; font-size: .85em;
+    background: var(--key-bg); border: 1px solid var(--rule); border-bottom-width: 2px;
+    border-radius: 4px; padding: 0 .4em; white-space: nowrap; direction: ltr; unicode-bidi: isolate;
+  }
+
+  table { width: 100%; border-collapse: collapse; margin: .8rem 0 1.2rem; }
+  caption { text-align: right; font-weight: 700; color: var(--muted); padding-bottom: .3rem; }
+  th, td { text-align: right; padding: .45rem .7rem; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  thead th { color: var(--green); border-bottom: 2px solid var(--gold); }
+  td:first-child { white-space: nowrap; }
+
+  .division { border-right: 3px solid var(--gold); padding: .2rem 1rem .4rem; margin: 1.2rem 0; }
+  .division h3 { margin-top: .3rem; }
+  .division .count { color: var(--gold); font-weight: 700; }
+
+  .note { background: var(--key-bg); border-radius: 6px; padding: .7rem 1rem; margin: 1rem 0; }
+
+  footer { text-align: center; margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); color: var(--muted); }
+
+  @media (forced-colors: active) {
+    .book, nav.toc, kbd { border: 1px solid CanvasText; }
+    h2::before { content: ""; }
+  }
+  @media print {
+    body { background: #fff; }
+    .book { border: 0; outline: 0; margin: 0; max-width: none; }
+    .skip, nav.toc { display: none; }
+  }
+</style>
+</head>
+<body>
+<a class="skip" href="#content">تخطَّ إلى محتوى الدليل</a>
+
+<div class="book">
+<header class="title">
+  <p class="ornament" aria-hidden="true">۞ ۞ ۞</p>
+  <h1>دليل استخدام المصحف الشريف</h1>
+  <p class="sub">القرآن الكريم برواية حفص عن عاصم، على رسم مصحف المدينة النبوية</p>
+</header>
+
+<blockquote class="ayah" lang="ar">
+  ﴿كِتَـٰبٌ أَنزَلْنَـٰهُ إِلَيْكَ مُبَـٰرَكٌ لِّيَدَّبَّرُوٓا۟ ءَايَـٰتِهِۦ وَلِيَتَذَكَّرَ أُو۟لُوا۟ ٱلْأَلْبَـٰبِ﴾
+  <cite>[سورة ص: ٢٩]</cite>
+</blockquote>
+
+<nav class="toc" aria-labelledby="toc-title">
+  <h2 id="toc-title">محتويات الدليل</h2>
+  <ol>
+    <li><a href="#intro">تمهيد</a></li>
+    <li><a href="#window">أقسام النافذة</a></li>
+    <li><a href="#divisions">تقسيمات المصحف وطرق التصفح</a></li>
+    <li><a href="#reading">التلاوة والتنقل بين الآيات</a></li>
+    <li><a href="#goto">الانتقال السريع ومواضع السجود</a></li>
+    <li><a href="#search">البحث في القرآن الكريم</a></li>
+    <li><a href="#copy">نسخ الآيات</a></li>
+    <li><a href="#marks">المفضلة وفاصل الختمة</a></li>
+    <li><a href="#info">بيانات الآية والسورة</a></li>
+    <li><a href="#screenreader">القراءة بقارئ الشاشة</a></li>
+    <li><a href="#look">المظهر والعرض</a></li>
+    <li><a href="#options">نافذة الخيارات</a></li>
+    <li><a href="#shortcuts">جدول الاختصارات</a></li>
+  </ol>
+</nav>
+
+<main id="content">
+
+<section aria-labelledby="intro">
+<h2 id="intro">تمهيد</h2>
+<p>
+  «المصحف الشريف» برنامج لتلاوة كتاب الله تعالى ومراجعته وتدبّره على الحاسوب، يعرض القرآن الكريم برواية حفص
+  عن عاصم، على رسم مصحف المدينة النبوية الصادر عن مجمع الملك فهد لطباعة المصحف الشريف، في ستمئة وأربع صفحات
+  مطابقة لصفحات المصحف الورقي.
+</p>
+<p>
+  وقد صُمّم ليكون رفيقًا هادئًا للقارئ، خاليًا مما يشغل القلب عن الآيات؛ فكل ما فيه يُوصَل إليه بالفأرة
+  وبلوحة المفاتيح على السواء، وكل ما يظهر على الشاشة يُنطَق بقارئ الشاشة.
+</p>
+<p>
+  ويحفظ البرنامج موضع قراءتك عند إغلاقه، فيفتح في المرة التالية على الآية التي وقفت عندها.
+  وأول ما يفتح يبدأ من سورة الفاتحة، كما يبدأ المصحف الورقي.
+</p>
+<p>
+  ويمكنك الرجوع إلى هذا الدليل متى شئت من قائمة «المساعدة» في البرنامج.
+</p>
+</section>
+
+<section aria-labelledby="window">
+<h2 id="window">أقسام النافذة</h2>
+<p class="lead">تتألف النافذة من ثلاثة أقسام، وبينها يُتنقَّل بمفتاح <kbd>F6</kbd>.</p>
+
+<h3>الشريط العلوي</h3>
+<p>
+  فيه قائمة «تصفح حسب» لاختيار طريقة التصفح (بالسور أو الصفحات أو الأجزاء وغيرها)، وزر «البحث في القرآن»،
+  وسطر يبيّن موضعك الحالي: السورة والآية والصفحة والجزء والحزب.
+</p>
+
+<h3>صفحة المصحف</h3>
+<p>
+  وهي قلب البرنامج، تُعرض فيها آيات الوحدة الحالية آيةً آية، يتقدّمها اسم السورة وبيانها إذا كانت بدايتها
+  في الصفحة. وحول الصفحة إطار مذهّب، وعلى جانبيها سهمان لتقليب الصفحات بالفأرة.
+</p>
+
+<h3>الفهرس الجانبي</h3>
+<p>
+  قائمة جانبية فيها مربع لتصفية الفهرس بالاسم أو الرقم، وتبويبان: «الفهرس» لسور القرآن أو وحداته،
+  و«المفضلة» للآيات التي حفظتها. وهو مخفيّ في أول الاستعمال ليبقى المصحف وحده أمامك، ويُظهَر ويُخفى
+  بمفتاح <kbd>F9</kbd>. وإن ضاقت النافذة عنه اختفى من تلقاء نفسه حتى تتسع.
+</p>
+
+<h3>فهرس الوحدات</h3>
+<p>
+  إذا ضغطت <kbd>Escape</kbd> وأنت في الآيات انتقلت إلى فهرس الوحدات بحسب طريقة التصفح الحالية
+  (فهرس السور، أو فهرس الصفحات، أو الأجزاء...). فاختر منه ما تشاء واضغط <kbd>Enter</kbd> لفتحه،
+  أو اضغط <kbd>Escape</kbd> مرة أخرى للرجوع إلى الآيات. ويُفتح هذا الفهرس أيضًا بالاختصار <kbd>Ctrl+L</kbd>.
+</p>
+</section>
+
+<section aria-labelledby="divisions">
+<h2 id="divisions">تقسيمات المصحف وطرق التصفح</h2>
+<p class="lead">
+  قسّم أهل العلم القرآن الكريم تقسيمات تعين على حفظه وتلاوته وختمه. ويتيح البرنامج التصفح بسبعة منها،
+  تختار أيّها من قائمة «تصفح حسب» أو من قائمة «التصفح والتنقل» أو باختصارها المبيّن مع كل تقسيمة.
+  وأيًّا كانت طريقة التصفح فإن <kbd>Page Down</kbd> ينقلك إلى الوحدة التالية، و<kbd>Page Up</kbd> إلى السابقة،
+  مع صوت هادئ لتقليب الصفحة يمكن إيقافه من الخيارات.
+</p>
+
+<div class="division">
+<h3>السورة <span class="count">(١١٤ سورة)</span> — <kbd>Alt+1</kbd></h3>
+<p>
+  السورة طائفة من آيات القرآن لها اسم وبداية ونهاية، أولها الفاتحة وآخرها الناس. ومنها المكي الذي نزل قبل
+  الهجرة، والمدني الذي نزل بعدها. والتصفح بالسور هو الأصل في البرنامج، فتُعرض السورة كاملة من أولها إلى آخرها.
+</p>
+</div>
+
+<div class="division">
+<h3>الصفحة <span class="count">(٦٠٤ صفحات)</span> — <kbd>Alt+2</kbd></h3>
+<p>
+  صفحات مصحف المدينة النبوية كما طُبعت في مجمع الملك فهد، وكل صفحة تبدأ بالآية التي تبدأ بها في المصحف
+  الورقي وتنتهي حيث ينتهي. وهي أنسب طريقة لمن يحفظ القرآن بمواضع الآيات في صفحاتها، أو يقرأ وِردًا بعدد من الصفحات.
+</p>
+</div>
+
+<div class="division">
+<h3>الجزء <span class="count">(٣٠ جزءًا)</span> — <kbd>Alt+3</kbd></h3>
+<p>
+  قُسّم القرآن ثلاثين جزءًا متقاربة في المقدار، وعليها يعتمد كثير من الناس في ختم القرآن في شهر، جزءًا كل يوم،
+  ولا سيما في رمضان. ويُعرف كل جزء بأول كلماته، كجزء «عمّ» وجزء «تبارك».
+</p>
+</div>
+
+<div class="division">
+<h3>الحزب <span class="count">(٦٠ حزبًا)</span> — <kbd>Alt+5</kbd></h3>
+<p>
+  كل جزء حزبان، فالقرآن ستون حزبًا. والحزب مقدار مناسب لوِرد يومي لمن يختم في شهرين، أو لوِردين في اليوم لمن يختم في شهر.
+</p>
+</div>
+
+<div class="division">
+<h3>الربع <span class="count">(٢٤٠ ربعًا)</span> — <kbd>Alt+4</kbd></h3>
+<p>
+  كل حزب أربعة أرباع، فالقرآن مئتان وأربعون ربعًا، وتُعلَّم بداياتها في المصحف بالعلامة ۞.
+  والربع مقدار يسير يصلح للمراجعة والتسميع، ويُعرف كل ربع بأول كلماته.
+</p>
+</div>
+
+<div class="division">
+<h3>المنزلة <span class="count">(٧ منازل)</span> — <kbd>Alt+6</kbd></h3>
+<p>
+  المنازل السبع تقسيم قديم لمن يختم القرآن في أسبوع، منزلةً كل يوم، وقد كان عليه عمل كثير من السلف.
+  ويجمع بداياتها قولهم «فمي بشوق»: فكل حرف منها أول سورة تبدأ بها منزلة: الفاتحة، ثم المائدة، ثم يونس،
+  ثم بني إسرائيل (الإسراء)، ثم الشعراء، ثم والصافات، ثم سورة ق.
+</p>
+</div>
+
+<div class="division">
+<h3>الركوع <span class="count">(٥٥٨ ركوعًا)</span> — <kbd>Alt+7</kbd></h3>
+<p>
+  الركوع مقطع من السورة يتناول معنى متكاملًا، وتُعلَّم نهايته في المصاحف المطبوعة في شبه القارة الهندية
+  بحرف العين في الهامش. وسُمّي بذلك لأنه المقدار الذي يحسن أن يقرأه المصلي ثم يركع، وهو عون على فهم وحدة المعنى في الآيات.
+</p>
+</div>
+</section>
+
+<section aria-labelledby="reading">
+<h2 id="reading">التلاوة والتنقل بين الآيات</h2>
+<p class="lead">قائمة الآيات هي موضع القراءة، وفيها تعمل هذه المفاتيح:</p>
+<table>
+  <caption>التنقل داخل الآيات</caption>
+  <thead><tr><th scope="col">المفتاح</th><th scope="col">العمل</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>↓</kbd> و<kbd>↑</kbd></td><td>الانتقال إلى الآية التالية أو السابقة، ويقرؤها قارئ الشاشة فور الوقوف عليها.</td></tr>
+    <tr><td><kbd>Home</kbd> و<kbd>End</kbd></td><td>الانتقال إلى أول آية أو آخر آية في الوحدة الحالية.</td></tr>
+    <tr><td><kbd>Page Down</kbd> و<kbd>Page Up</kbd></td><td>الوحدة التالية أو السابقة: السورة أو الصفحة أو الجزء، بحسب طريقة التصفح.</td></tr>
+    <tr><td><kbd>Alt+←</kbd> و<kbd>Alt+→</kbd></td><td>الرجوع إلى الموضع الذي كنت فيه قبل آخر انتقال، ثم التقدم مرة أخرى، كالرجوع في المتصفح.</td></tr>
+    <tr><td><kbd>I</kbd></td><td>نطق موضع الآية سريعًا: السورة ونوعها، ورقم الآية، والصفحة، والجزء، والحزب، والربع، والمنزلة.</td></tr>
+    <tr><td><kbd>Ctrl+D</kbd></td><td>الرجوع إلى قائمة الآيات من أي مكان في النافذة.</td></tr>
+    <tr><td><kbd>Escape</kbd></td><td>الانتقال إلى فهرس الوحدات.</td></tr>
+  </tbody>
+</table>
+
+<h3>بالفأرة</h3>
+<p>
+  إذا حرّكت الفأرة ظهر سهمان على جانبي الصفحة لتقليبها: السهم الأيسر للصفحة التالية، والأيمن للسابقة،
+  كما تُقلَّب صفحات المصحف. ويختفيان بعد ثلاث ثوانٍ من سكون الفأرة حتى لا يبقى أمام القارئ إلا كلام الله.
+  وفي الركن العلوي علامة لعرض المصحف بملء الشاشة.
+</p>
+<p>
+  وبزر الفأرة الأيمن على الآية تظهر قائمتها، وعلى عنوان السورة تظهر قائمة السورة. ومن لوحة المفاتيح تُفتح القائمتان
+  بزر التطبيقات أو <kbd>Shift+F10</kbd>.
+</p>
+</section>
+
+<section aria-labelledby="goto">
+<h2 id="goto">الانتقال السريع ومواضع السجود</h2>
+<p class="lead">للوصول إلى موضع بعينه دون تقليب.</p>
+<h3>الانتقال السريع <kbd>Ctrl+G</kbd></h3>
+<p>نافذة فيها أربعة تبويبات:</p>
+<ul>
+  <li><strong>بالسورة والآية:</strong> اختر السورة واكتب رقم الآية.</li>
+  <li><strong>بالصفحة:</strong> اكتب رقم الصفحة (من ١ إلى ٦٠٤).</li>
+  <li><strong>بالجزء أو الربع:</strong> اكتب رقم الجزء (من ١ إلى ٣٠) أو رقم الربع (من ١ إلى ٢٤٠).</li>
+  <li><strong>بالحزب أو المنزلة أو الركوع:</strong> اكتب رقم الحزب أو المنزلة أو الركوع.</li>
+</ul>
+<h3>مواضع سجدات التلاوة <kbd>Ctrl+Shift+S</kbd></h3>
+<p>
+  قائمة بمواضع السجود الخمسة عشر في القرآن الكريم، فاختر منها موضعًا واضغط <kbd>Enter</kbd> للانتقال إلى آيته.
+</p>
+</section>
+
+<section aria-labelledby="search">
+<h2 id="search">البحث في القرآن الكريم</h2>
+<p class="lead">يُفتح البحث بالاختصار <kbd>Ctrl+F</kbd> أو بزر «البحث في القرآن» في الشريط العلوي.</p>
+<ul>
+  <li>اكتب كلمة أو عبارة ثم اضغط <kbd>Enter</kbd>، فتظهر الآيات التي وردت فيها.</li>
+  <li>لا يلزم كتابة التشكيل ولا الرسم العثماني، فالبحث بالكتابة المعتادة يجد الآية ولو اختلف رسمها في المصحف.</li>
+  <li>يمكنك كتابة مرجع الآية مباشرة، فكتابة <kbd>2:255</kbd> تأتيك بالآية الخامسة والخمسين بعد المئتين من سورة البقرة، وكتابة «آية الكرسي» تأتيك بها كذلك.</li>
+  <li>من «نطاق البحث» تحصر البحث في سورة واحدة بدل القرآن كله.</li>
+  <li>تُعرض أول مئتين وخمسين آية مطابقة، فإن كثرت النتائج فاحصرها في سورة لترى بقيتها.</li>
+  <li>على أي نتيجة: <kbd>Enter</kbd> أو <kbd>C</kbd> لنسخ الآية، وزر «فتح الآية والوقوف عليها في المصحف» للانتقال إليها في موضعها.</li>
+</ul>
+</section>
+
+<section aria-labelledby="copy">
+<h2 id="copy">نسخ الآيات</h2>
+<p class="lead">للاستشهاد بالآيات في البحوث والرسائل والكتابة بعامة.</p>
+<table>
+  <caption>طرق النسخ</caption>
+  <thead><tr><th scope="col">المفتاح</th><th scope="col">العمل</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>Enter</kbd> أو <kbd>Ctrl+C</kbd> أو <kbd>F8</kbd></td><td>نسخ الآية الحالية.</td></tr>
+    <tr><td><kbd>Ctrl+Alt+C</kbd></td><td>النسخ المتعدد: تظهر آيات الوحدة بمربعات اختيار، فحدّد ما تشاء بمفتاح المسافة واضغط <kbd>Enter</kbd> لنسخها معًا، و<kbd>Ctrl+A</kbd> لتحديدها كلها.</td></tr>
+    <tr><td><kbd>Ctrl+Shift+A</kbd></td><td>نسخ كل آيات الوحدة المعروضة.</td></tr>
+  </tbody>
+</table>
+<ul>
+  <li><strong>بالفأرة:</strong> اسحب على الآيات لتظليلها، وكل سحب يضيف إلى ما ظلّلته قبله، ومع <kbd>Ctrl</kbd> تظلّل بالنقر آية واحدة أو تلغي تظليلها. ثم اختر «نسخ» من قائمة الآية، فتُنسخ كل الآيات المظللة.</li>
+  <li><strong>نسخ السورة:</strong> من قائمة السورة تنسخ بيانها أو السورة كاملة.</li>
+</ul>
+<h3>هيئة النص المنسوخ</h3>
+<p>من تبويب «النسخ والتصفح» في الخيارات تختار:</p>
+<ul>
+  <li><strong>نوع الرسم:</strong> الرسم العثماني المشكول، أو رسم حفص الصادر عن مجمع الملك فهد، أو الرسم الإملائي المشكول الذي يُقرأ بأي خط في أي برنامج.</li>
+  <li><strong>القوسان القرآنيان:</strong> إحاطة الآية بالقوسين المزخرفين ﴿ ﴾.</li>
+  <li><strong>التوثيق:</strong> إضافة اسم السورة ورقم الآية بعد النص بين معقوفين.</li>
+  <li><strong>الأرقام:</strong> الأرقام العربية المشرقية (١٢٣) أو الأرقام (123).</li>
+</ul>
+<p>وتعرض النافذة معاينة للنص كما سيُنسخ، فترى أثر اختيارك قبل حفظه.</p>
+</section>
+
+<section aria-labelledby="marks">
+<h2 id="marks">المفضلة وفاصل الختمة</h2>
+<p class="lead">لحفظ مواضع الآيات التي تعود إليها، ولمتابعة الختمة من حيث توقفت.</p>
+<h3>فاصل الختمة</h3>
+<p>
+  هو علامة واحدة تضعها حيث توقفت في ختمتك، كالشريط في المصحف الورقي. ضعه عند الآية الحالية بحرف <kbd>M</kbd>
+  أو <kbd>Ctrl+M</kbd>، وعُد إليه متى شئت بالاختصار <kbd>Alt+M</kbd>. ووضعه في موضع جديد ينقله إليه.
+</p>
+<h3>المفضلة</h3>
+<p>
+  تحفظ فيها ما شئت من الآيات: اضغط <kbd>B</kbd> على الآية لإضافتها، واضغطه مرة أخرى لإزالتها.
+  وتجد المفضلة في تبويب «المفضلة» في الفهرس الجانبي، وفي نافذة «العلامات المرجعية وفاصل الختمة» (<kbd>Ctrl+B</kbd>)،
+  وفيها تنتقل إلى الآية بـ<kbd>Enter</kbd>، وتنسخها بـ<kbd>Ctrl+C</kbd>، وتحذفها بـ<kbd>Delete</kbd>.
+</p>
+</section>
+
+<section aria-labelledby="info">
+<h2 id="info">بيانات الآية والسورة</h2>
+<p class="lead">معلومات تعين الباحث وطالب العلم والقارئ المتدبّر.</p>
+<h3>بيانات الآية <kbd>Ctrl+I</kbd></h3>
+<p>
+  تعرض السورة ورقم الآية وموقعها فيها، وترتيبها العام في المصحف من ٦٢٣٦ آية، وعدد كلماتها وحروفها وتفصيل حروفها،
+  وعدد مرات ورود لفظ الجلالة فيها، وهل يتكرر نصها في موضع آخر من القرآن، وصفحتها وجزءها وحزبها وربعها وركوعها
+  ومنزلتها، وبيان السجدة إن كانت آية سجدة.
+</p>
+<h3>بيانات السورة <kbd>Ctrl+Shift+I</kbd></h3>
+<p>
+  تعرض اسم السورة وترتيبها في المصحف وترتيب نزولها، وأهي مكية أم مدنية، والآيات المستثناة من ذلك إن وُجدت،
+  وعدد آياتها وصفحاتها والأجزاء التي تقع فيها، وركوعاتها، وعدد كلماتها وحروفها، وأطول آياتها وأقصرها، وورود لفظ
+  الجلالة فيها، ومواضع السجود.
+</p>
+<p>
+  وتُعرض البيانات سطرًا سطرًا، فيُنقَل بينها بالأسهم ويُنسخ السطر الحالي بـ<kbd>Ctrl+C</kbd>، أو تُنسخ البيانات كلها بزر «نسخ المعلومات».
+</p>
+</section>
+
+<section aria-labelledby="screenreader">
+<h2 id="screenreader">القراءة بقارئ الشاشة</h2>
+<p class="lead">
+  يعمل البرنامج مع قارئَي الشاشة NVDA وJAWS، فتُقرأ الآية كاملة بمجرد الوقوف عليها، وتُنطق كل نافذة وكل خيار.
+  وتُضبط القراءة من تبويب «قارئات الشاشة» في الخيارات:
+</p>
+<ul>
+  <li><strong>نطق الآية تلقائيًا</strong> فور الوقوف عليها بالأسهم. وهو مفعّل في الأصل.</li>
+  <li><strong>تحسين نطق الرسم العثماني:</strong> يجعل قارئ الشاشة ينطق كلمات مثل «الرحمٰن» و«العٰلمين» و«ذٰلك» نطقًا صحيحًا. وهو مفعّل في الأصل.</li>
+  <li><strong>تفكيك الحروف المقطعة</strong> في فواتح السور إلى أسمائها، فتُنطق «الم» «ألف لام ميم».</li>
+  <li><strong>نطق علامات الوقف بأسمائها</strong> كما في المصحف: صلى، قلى، ج، م، لا، والسكتة، وعلامة التعانق. وهو معطّل في الأصل لمن لا يحتاجه.</li>
+  <li><strong>صوت ويندوز المدمج:</strong> ينطق البرنامج بصوت ويندوز إذا لم يكن قارئ شاشة يعمل.</li>
+</ul>
+<p>
+  ومن تبويب «الخط والمظهر» يمكن إظهار عدّاد الحروف لكل آية، فيُعرض مع الآية ويُنطق معها.
+</p>
+<div class="note">
+  اختصارات البرنامج كلها مختارة بحيث لا تتعارض مع أوامر قارئ الشاشة، ونافذة تخصيص الاختصارات تمنع اختيار
+  ما يتعارض معها.
+</div>
+</section>
+
+<section aria-labelledby="look">
+<h2 id="look">المظهر والعرض</h2>
+<p class="lead">ليكون المصحف مريحًا للعين على كل شاشة وفي كل وقت.</p>
+<h3>المظهر اللوني <kbd>Ctrl+T</kbd></h3>
+<p>أربعة مظاهر يُبدَّل بينها بالاختصار نفسه:</p>
+<ul>
+  <li><strong>كريمي المدينة:</strong> وهو الأصل، بلون ورق المصحف المريح للعين.</li>
+  <li><strong>أخضر زمردي ملكي.</strong></li>
+  <li><strong>ليلي ذهبي هادئ:</strong> للقراءة في الإضاءة الخافتة.</li>
+  <li><strong>تباين عالٍ:</strong> أصفر على أسود لضعاف البصر. ويتحول إليه البرنامج تلقائيًا إذا فُعّل التباين العالي في ويندوز.</li>
+</ul>
+<h3>الخط</h3>
+<ul>
+  <li>تكبير خط الآيات بـ<kbd>Ctrl+=</kbd>، وتصغيره بـ<kbd>Ctrl+-</kbd>، وإعادته إلى حجمه الأصلي بـ<kbd>Ctrl+0</kbd>، وحجمه من ١٦ إلى ٥٢.</li>
+  <li>
+    من الخيارات تختار بين أربعة خطوط قرآنية: خط حفص العثماني الصادر عن مجمع الملك فهد (وهو الأصل)،
+    والخط الأميري القرآني، وخط أميري الكلاسيكي، وخط شهرزاد القرآني الجديد.
+  </li>
+</ul>
+<h3>هيئة الصفحة</h3>
+<ul>
+  <li><strong>محاذاة السطور:</strong> توسيطها كالمصحف (وهو الأصل)، أو محاذاتها لليمين.</li>
+  <li><strong>طريقة عرض الآية:</strong> نص الآية فقط، أو مع رقمها، أو مع رقمها واسم السورة.</li>
+  <li><strong>إطار المصحف المذهّب:</strong> يُظهَر ويُخفى من قائمة «الخيارات والعرض».</li>
+</ul>
+<h3>ملء الشاشة <kbd>F11</kbd></h3>
+<p>
+  يعرض المصحف وحده على الشاشة كلها بلا شريط ولا قوائم، ويُخرج منه بـ<kbd>F11</kbd> أو <kbd>Escape</kbd>.
+  ولمن يستعمل الفأرة تظهر عند تحريكها علامتان في ركني الشاشة العلويين: علامة للخروج من ملء الشاشة، وعلامة ×
+  لإغلاق البرنامج، ثم تختفيان بعد ثلاث ثوانٍ.
+</p>
+<h3>الشاشات المختلفة</h3>
+<p>
+  يتكيّف البرنامج مع حجم الشاشة ودقتها، من الحاسوب المحمول الصغير إلى الشاشات الكبيرة عالية الدقة، فيبقى الخط
+  واضحًا في كلٍّ منها. وفي الشاشة الكبيرة تتوسط الصفحة بعرض مريح للقراءة بدل أن تمتد سطورها امتدادًا يُتعب العين.
+</p>
+</section>
+
+<section aria-labelledby="options">
+<h2 id="options">نافذة الخيارات</h2>
+<p class="lead">تُفتح بالاختصار <kbd>Ctrl+O</kbd>، وفيها أربعة تبويبات، وتُحفظ بزر «حفظ الخيارات وتطبيقها».</p>
+<h3>النسخ والتصفح</h3>
+<p>
+  طريقة التصفح الأصلية، ولغة الواجهة (العربية أو الإنجليزية)، وصوت تقليب الصفحة، وإظهار الفهرس الجانبي،
+  والموضع الذي يفتح عليه البرنامج (قائمة الآيات، أو فهرس السور، أو فهرس الوحدات)، وهيئة النص المنسوخ.
+</p>
+<h3>الخط والمظهر</h3>
+<p>محاذاة السطور، والخط القرآني وحجمه، وطريقة عرض الآية، والمظهر اللوني، وعدّاد الحروف.</p>
+<h3>قارئات الشاشة</h3>
+<p>خيارات النطق المبيّنة في قسم <a href="#screenreader">القراءة بقارئ الشاشة</a>.</p>
+<h3>تخصيص الاختصارات</h3>
+<p>
+  اختر الأمر من القائمة، ثم انتقل إلى مربع «الاختصار الجديد» واضغط المفاتيح التي تريدها. ويُشترط أن يكون
+  الاختصار بـ<kbd>Ctrl</kbd> أو <kbd>Alt</kbd> أو بأحد المفاتيح من <kbd>F1</kbd> إلى <kbd>F12</kbd>، حتى لا يتعارض
+  مع قارئ الشاشة. ويمكنك استعادة الاختصار الأصلي لأمر واحد أو لجميع الأوامر.
+</p>
+</section>
+
+<section aria-labelledby="shortcuts">
+<h2 id="shortcuts">جدول الاختصارات</h2>
+<p class="lead">
+  هذه اختصارات البرنامج الأصلية، ويُطّلع عليها من داخل البرنامج أيضًا بمفتاح <kbd>F1</kbd>. وإن غيّرت شيئًا منها
+  من الخيارات ظهر الاختصار الجديد في القوائم وفي نافذة <kbd>F1</kbd>.
+</p>
+<table>
+  <caption>التصفح والتنقل</caption>
+  <thead><tr><th scope="col">الاختصار</th><th scope="col">الأمر</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>Alt+1</kbd></td><td>التصفح بالسور</td></tr>
+    <tr><td><kbd>Alt+2</kbd></td><td>التصفح بالصفحات</td></tr>
+    <tr><td><kbd>Alt+3</kbd></td><td>التصفح بالأجزاء</td></tr>
+    <tr><td><kbd>Alt+4</kbd></td><td>التصفح بالأرباع</td></tr>
+    <tr><td><kbd>Alt+5</kbd></td><td>التصفح بالأحزاب</td></tr>
+    <tr><td><kbd>Alt+6</kbd></td><td>التصفح بالمنازل السبع</td></tr>
+    <tr><td><kbd>Alt+7</kbd></td><td>التصفح بالركوعات</td></tr>
+    <tr><td><kbd>Page Down</kbd> / <kbd>Page Up</kbd></td><td>الوحدة التالية / السابقة</td></tr>
+    <tr><td><kbd>Ctrl+G</kbd></td><td>الانتقال السريع</td></tr>
+    <tr><td><kbd>Ctrl+F</kbd></td><td>البحث في القرآن</td></tr>
+    <tr><td><kbd>Ctrl+Shift+S</kbd></td><td>مواضع سجدات التلاوة</td></tr>
+    <tr><td><kbd>Alt+←</kbd> / <kbd>Alt+→</kbd></td><td>الرجوع إلى الموضع السابق / التقدم إلى التالي</td></tr>
+    <tr><td><kbd>Ctrl+D</kbd></td><td>التركيز على قائمة الآيات</td></tr>
+    <tr><td><kbd>Ctrl+L</kbd></td><td>فهرس الوحدات</td></tr>
+    <tr><td><kbd>F6</kbd></td><td>التنقل بين أقسام النافذة</td></tr>
+  </tbody>
+</table>
+<table>
+  <caption>على الآية</caption>
+  <thead><tr><th scope="col">الاختصار</th><th scope="col">الأمر</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>Enter</kbd> / <kbd>Ctrl+C</kbd> / <kbd>F8</kbd></td><td>نسخ الآية</td></tr>
+    <tr><td><kbd>Ctrl+Alt+C</kbd></td><td>النسخ المتعدد</td></tr>
+    <tr><td><kbd>Ctrl+Shift+A</kbd></td><td>نسخ الوحدة الحالية كاملة</td></tr>
+    <tr><td><kbd>B</kbd></td><td>إضافة الآية إلى المفضلة أو إزالتها منها</td></tr>
+    <tr><td><kbd>M</kbd> / <kbd>Ctrl+M</kbd></td><td>وضع فاصل الختمة عند الآية</td></tr>
+    <tr><td><kbd>Alt+M</kbd></td><td>الانتقال إلى فاصل الختمة</td></tr>
+    <tr><td><kbd>Ctrl+B</kbd></td><td>العلامات المرجعية وفاصل الختمة</td></tr>
+    <tr><td><kbd>I</kbd></td><td>نطق موضع الآية</td></tr>
+    <tr><td><kbd>Ctrl+I</kbd></td><td>بيانات الآية</td></tr>
+    <tr><td><kbd>Ctrl+Shift+I</kbd></td><td>بيانات السورة</td></tr>
+    <tr><td>زر التطبيقات / <kbd>Shift+F10</kbd></td><td>قائمة الآية أو قائمة السورة</td></tr>
+  </tbody>
+</table>
+<table>
+  <caption>العرض والخيارات</caption>
+  <thead><tr><th scope="col">الاختصار</th><th scope="col">الأمر</th></tr></thead>
+  <tbody>
+    <tr><td><kbd>Ctrl+O</kbd></td><td>نافذة الخيارات</td></tr>
+    <tr><td><kbd>Ctrl+T</kbd></td><td>تبديل المظهر اللوني</td></tr>
+    <tr><td><kbd>Ctrl+=</kbd> / <kbd>Ctrl+-</kbd></td><td>تكبير خط الآيات / تصغيره</td></tr>
+    <tr><td><kbd>Ctrl+0</kbd></td><td>الحجم الأصلي لخط الآيات</td></tr>
+    <tr><td><kbd>F9</kbd></td><td>إظهار الفهرس الجانبي أو إخفاؤه</td></tr>
+    <tr><td><kbd>F11</kbd></td><td>ملء الشاشة</td></tr>
+    <tr><td><kbd>F1</kbd></td><td>دليل الاختصارات داخل البرنامج</td></tr>
+    <tr><td><kbd>Alt+F4</kbd></td><td>الخروج من البرنامج</td></tr>
+  </tbody>
+</table>
+</section>
+
+</main>
+
+<footer>
+  <blockquote class="ayah" lang="ar">
+    ﴿إِنَّ هَـٰذَا ٱلْقُرْءَانَ يَهْدِى لِلَّتِى هِىَ أَقْوَمُ وَيُبَشِّرُ ٱلْمُؤْمِنِينَ ٱلَّذِينَ يَعْمَلُونَ ٱلصَّـٰلِحَـٰتِ أَنَّ لَهُمْ أَجْرًا كَبِيرًا﴾
+    <cite>[سورة الإسراء: ٩]</cite>
+  </blockquote>
+  <p>نسأل الله أن ينفع بهذا البرنامج، وأن يجعله خالصًا لوجهه الكريم.</p>
+  <p>© ٢٠٢٦ أمنية تكنولوجي (Omnya Technology)</p>
+</footer>
+</div>
+</body>
+</html>
