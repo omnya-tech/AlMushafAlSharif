@@ -53,8 +53,8 @@ Name: "english"; MessagesFile: "compiler:Default.isl"; LicenseFile: "legal\LICEN
 [CustomMessages]
 arabic.AppName={#AppNameAr}
 english.AppName={#AppNameEn}
-arabic.AppComment=هدية من فريق {#AppPublisher} للباحثين وطلاب الدراسات العليا وعموم المسلمين
-english.AppComment=A gift from the {#AppPublisher} team to researchers, graduate students and all Muslims
+arabic.AppComment=هدية من فريق {#AppPublisher} للباحثين وعموم المسلمين
+english.AppComment=A gift from the {#AppPublisher} team to researchers and all Muslims
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"

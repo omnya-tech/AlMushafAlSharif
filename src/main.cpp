@@ -4168,7 +4168,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 L"Built to be a calm companion for reciting, reviewing and reflecting on the Book of Allah, "
                 L"with nothing to draw the heart away from its verses.",
                 L"Developed by the Omnya Technology team and offered, seeking only the pleasure of Allah, "
-                L"as a gift to researchers, master's and doctoral students, and all Muslims.",
+                L"as a gift to researchers and all Muslims.",
                 L"Runs on Windows 7 and later, and serves sighted readers and screen reader users alike.",
                 L"© 2026 Omnya Technology"
             } : std::vector<std::wstring>{
@@ -4180,7 +4180,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 L"صُمِّم ليكون رفيقاً هادئاً لتلاوة كتاب الله ومراجعته وتدبّره، "
                 L"خالياً مما يشغل القلب عن آياته.",
                 L"طوّره فريق (Omnya Technology)، وقدّمه هديةً خالصةً لوجه الله تعالى "
-                L"إلى الباحثين وطلاب الماجستير والدكتوراه وعموم المسلمين.",
+                L"إلى الباحثين وعموم المسلمين.",
                 L"يعمل على ويندوز ٧ فأحدث، ويخدم المبصرين ومستخدمي قارئات الشاشة على حدٍّ سواء.",
                 L"حقوق النشر © ٢٠٢٦ لفريق Omnya Technology"
             };
