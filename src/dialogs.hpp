@@ -1554,6 +1554,7 @@ struct BookmarksDlgState {
     HFONT font = nullptr;
     HWND lbl_khatmah_info = nullptr;
     HWND btn_resume_khatmah = nullptr;
+    HWND btn_remove_khatmah = nullptr;
     HWND list_hwnd = nullptr;
     std::vector<AyahInfo> bm_ayahs;
     SearchDlgResult out;
@@ -1568,6 +1569,7 @@ static void refresh_bookmarks_dialog_ui(BookmarksDlgState* st) {
             ? L"No reading mark set yet. Press M or Ctrl+M while reading to mark the ayah where you stopped."
             : L"لم يتم تحديد فاصل الختمة بعد. اضغط M أو Ctrl+M أثناء القراءة لوضع علامة التوقف عند الآية التي وصلت إليها.");
         EnableWindow(st->btn_resume_khatmah, FALSE);
+        EnableWindow(st->btn_remove_khatmah, FALSE);
     } else {
         int pct = (int)((ka.id * 100.0) / std::max(1, st->db->total_ayahs()) + 0.5);
         std::wstring s_name = ka.surah_name;
@@ -1582,6 +1584,7 @@ static void refresh_bookmarks_dialog_ui(BookmarksDlgState* st) {
                L"، المنزلة " + std::to_wstring(ka.manzil_number) + L" (أتممت " + std::to_wstring(pct) + L"٪ من المصحف)");
         SetWindowTextW(st->lbl_khatmah_info, ktxt.c_str());
         EnableWindow(st->btn_resume_khatmah, TRUE);
+        EnableWindow(st->btn_remove_khatmah, TRUE);
     }
 
     // 2. تحديث قائمة المفضلة (مع الإبقاء على موضع التحديد قدر الإمكان)
@@ -1650,6 +1653,16 @@ static LRESULT CALLBACK BookmarksWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
                 st->out.target = ka;
                 close_modal(hwnd);
             }
+            return 0;
+        }
+        if (id == 512 && st) { // إزالة فاصل الختمة
+            HWND foc = GetFocus();
+            st->settings->khatmah_verse_key.clear();
+            st->settings->save();
+            refresh_bookmarks_dialog_ui(st);
+            if (st->sr) st->sr->speak(st->is_en ? L"Reading mark removed" : L"تمت إزالة فاصل الختمة", true);
+            // الزر صار معطلاً، فلا يبقى التركيز عليه
+            if (foc == st->btn_remove_khatmah) SetFocus(st->list_hwnd);
             return 0;
         }
         if (id == 511 && st && st->current_ayah) { // وضع فاصل الختمة عند الآية الحالية
@@ -1754,11 +1767,15 @@ inline SearchDlgResult show_bookmarks_dialog(
     );
     st.btn_resume_khatmah = CreateWindowExW(
         0, L"BUTTON", is_en ? L"Resume reading from stop mark (Alt+M)" : L"متابعة القراءة من موضع التوقف (Alt+M)",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 30, 92, 320, 34, dlg, (HMENU)510, hInst, nullptr
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 30, 92, 270, 34, dlg, (HMENU)510, hInst, nullptr
     );
     HWND btn_set_khatmah = CreateWindowExW(
-        0, L"BUTTON", is_en ? L"Set reading mark at current ayah (M)" : L"وضع فاصل الختمة عند الآية الحالية (M)",
-        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 364, 92, 320, 34, dlg, (HMENU)511, hInst, nullptr
+        0, L"BUTTON", is_en ? L"Set at current ayah (M)" : L"وضعه عند الآية الحالية (M)",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 310, 92, 230, 34, dlg, (HMENU)511, hInst, nullptr
+    );
+    st.btn_remove_khatmah = CreateWindowExW(
+        0, L"BUTTON", is_en ? L"Remove reading mark" : L"إزالة فاصل الختمة",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 550, 92, 188, 34, dlg, (HMENU)512, hInst, nullptr
     );
     EnableWindow(btn_set_khatmah, current_ayah != nullptr);
 
@@ -1795,7 +1812,7 @@ inline SearchDlgResult show_bookmarks_dialog(
         608, 462, 130, 34, dlg, (HMENU)IDCANCEL, hInst, nullptr
     );
 
-    for (HWND h : {grp_k, st.lbl_khatmah_info, st.btn_resume_khatmah, btn_set_khatmah, grp_bm, st.list_hwnd, btn_go, btn_copy, btn_del, btn_close}) {
+    for (HWND h : {grp_k, st.lbl_khatmah_info, st.btn_resume_khatmah, btn_set_khatmah, st.btn_remove_khatmah, grp_bm, st.list_hwnd, btn_go, btn_copy, btn_del, btn_close}) {
         SendMessageW(h, WM_SETFONT, (WPARAM)ui_font, TRUE);
     }
 

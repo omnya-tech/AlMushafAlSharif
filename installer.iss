@@ -35,7 +35,10 @@ SolidCompression=yes
 WizardStyle=modern
 MinVersion=6.1sp1
 ArchitecturesInstallIn64BitMode=x64compatible
-PrivilegesRequired=lowest
+; التثبيت في Program Files لكل مستخدمي الجهاز (يطلب ويندوز إذن المسؤول مرة واحدة عند التثبيت)
+PrivilegesRequired=admin
+; لا يعود إلى مجلد تثبيت سابق في حساب المستخدم (AppData\Local\Programs)، بل يثبّت في Program Files
+UsePreviousAppDir=no
 CloseApplications=yes
 VersionInfoVersion={#AppVersion}
 VersionInfoCompany={#AppPublisher}
@@ -81,3 +84,29 @@ Root: HKCU; Subkey: "Software\AlMushafAlSharif"; ValueType: string; ValueName: "
 
 [Run]
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{cm:AppName}}"; Flags: nowait postinstall skipifsilent
+
+[Code]
+// الترقية من الإصدارات التي كانت تُثبَّت في حساب المستخدم (AppData\Local\Programs):
+// قبل نسخ الملفات يُزال ذلك التثبيت القديم بصمت، فلا تبقى نسختان ولا سطران في «إزالة البرامج».
+// إعدادات القارئ وموضع قراءته في AppData\Roaming لا يمسّها المزيل، فتبقى كما هي بعد التحديث.
+const
+  OldUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{AF7629F3-F29A-4FAD-ABF9-2A506A5375E6}_is1';
+
+procedure RemoveOldPerUserInstall();
+var
+  Uninstaller: String;
+  ResultCode: Integer;
+begin
+  if not RegQueryStringValue(HKCU, OldUninstallKey, 'UninstallString', Uninstaller) then
+    exit;
+  Uninstaller := RemoveQuotes(Uninstaller);
+  if not FileExists(Uninstaller) then
+    exit;
+  Exec(Uninstaller, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if CurStep = ssInstall then
+    RemoveOldPerUserInstall();
+end;

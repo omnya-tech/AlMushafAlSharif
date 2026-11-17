@@ -2224,6 +2224,13 @@ public:
         if (!require_ayah_row()) return;
         const AyahInfo* a = focused_ayah();
         if (!a) return;
+        if (settings.khatmah_verse_key == a->verse_key) {
+            settings.khatmah_verse_key.clear();
+            settings.save();
+            load_current_browse_unit(a->ayah_number, a->surah_number);
+            say(tr(L"تمت إزالة فاصل الختمة", L"Reading mark removed"));
+            return;
+        }
         settings.khatmah_verse_key = a->verse_key;
         settings.save();
         int s = a->surah_number, ay = a->ayah_number;
@@ -2669,7 +2676,9 @@ static void show_ayah_context_menu(HWND /*hwnd*/, int x, int y) {
     AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     AppendMenuW(menu, MF_STRING, IDM_TOGGLE_BOOKMARK, (in_bm ? g_app->tr(L"إزالة الآية من المفضلة\tB", L"Remove from bookmarks\tB")
                                                              : g_app->tr(L"إضافة الآية إلى المفضلة\tB", L"Add to bookmarks\tB")).c_str());
-    AppendMenuW(menu, MF_STRING, IDM_SET_KHATMAH,     g_app->tr(L"وضع فاصل الختمة عند الآية\tM", L"Set the reading mark here\tM").c_str());
+    const bool on_mark = (a->verse_key == g_app->settings.khatmah_verse_key);
+    AppendMenuW(menu, MF_STRING, IDM_SET_KHATMAH, (on_mark ? g_app->tr(L"إزالة فاصل الختمة\tM", L"Remove the reading mark\tM")
+                                                         : g_app->tr(L"وضع فاصل الختمة عند الآية\tM", L"Set the reading mark here\tM")).c_str());
 
     TrackPopupMenu(menu, TPM_RIGHTBUTTON, x, y, 0, g_app->hwnd, nullptr);
     DestroyMenu(menu);
