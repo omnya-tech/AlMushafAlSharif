@@ -4149,7 +4149,14 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             AyahInfo hifz;
             std::wstring hifz_txt;
             if (g_app->db->get_ayah(15, 9, hifz)) {
-                hifz_txt = L"﴿ " + hifz.text_uthmani + (g_app->is_en() ? L" ﴾ [Al-Hijr: 9]" : L" ﴾ [الحجر: ٩]");
+                // بخط الواجهة لا بالخط القرآني: بلا علامات المصحف الصغيرة (الواو الصغيرة والصفر المستدير
+                // وعلامات الوقف) ولا المدّة ولا التطويل، مع بقاء الحروف والحركات والألف الخنجرية
+                std::wstring clean;
+                for (wchar_t ch : hifz.text_uthmani) {
+                    if ((ch >= 0x06D6 && ch <= 0x06ED) || ch == 0x0653 || ch == 0x0640) continue;
+                    clean.push_back(ch);
+                }
+                hifz_txt = L"﴿" + join_words(split_words(clean), L" ") + L"﴾";
             }
             // الآية في رأس النافذة، ثم التعريف بالبرنامج
             std::vector<std::wstring> lines = g_app->is_en() ? std::vector<std::wstring>{
@@ -4166,7 +4173,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 L"© 2026 Omnya Technology"
             } : std::vector<std::wstring>{
                 hifz_txt,
-                L"المصحف الشريف — الإصدار ١٫٠٫٠",
+                L"المصحف الشريف — الإصدار 1.0.0",
                 L"القرآن الكريم برواية حفص عن عاصم، بالرسم العثماني، "
                 L"ويُتصفَّح بصفحات طبعتين: طبعة مجمع الملك فهد لطباعة المصحف الشريف بالمدينة المنورة، "
                 L"وطبعة دار المعارف بمصر.",
