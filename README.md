@@ -1,11 +1,12 @@
 # المصحف الشريف — Al-Mushaf Al-Sharif
 
-برنامج لتلاوة القرآن الكريم ومراجعته وتدبّره، برواية حفص عن عاصم على رسم مصحف المدينة النبوية (٦٠٤ صفحات).
+برنامج لتلاوة القرآن الكريم ومراجعته وتدبّره، برواية حفص عن عاصم بالرسم العثماني، ويُتصفَّح بصفحات طبعتين:
+طبعة مجمع الملك فهد بالمدينة المنورة، وطبعة دار المعارف بمصر.
 يخدم المبصرين ومستخدمي قارئات الشاشة على حدٍّ سواء، ويعمل على ويندوز ٧ و٨٫١ و١٠ و١١ (٣٢ و٦٤ بت).
 
-من تطوير فريق أمنية تكنولوجي (Omnya Technology)، هديةً للباحثين وطلاب الدراسات العليا وعموم المسلمين.
+من تطوير فريق Omnya Technology، هديةً للباحثين وطلاب الدراسات العليا وعموم المسلمين.
 
-A Windows app for reading, reviewing and reflecting on the Noble Quran (Hafs from 'Asim, Madinah Mushaf, 604 pages),
+A Windows app for reading, reviewing and reflecting on the Noble Quran (Hafs from 'Asim, Uthmani script, with the page layout of either the King Fahd Complex print or the Dar al-Maarif print),
 built for sighted readers and screen reader users alike. Developed by Omnya Technology.
 
 ## المزايا

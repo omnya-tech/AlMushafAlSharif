@@ -906,18 +906,20 @@ inline bool show_options_dialog(
     SendMessageW(btn_save, WM_SETFONT, (WPARAM)ui_font, TRUE);
     SendMessageW(btn_cancel, WM_SETFONT, (WPARAM)ui_font, TRUE);
 
-    // التنقل بـ Tab: عناصر الصفحة، ثم قائمة التبويبات، ثم «حفظ» و«إلغاء» بعدها
+    // التنقل بـ Tab: عناصر الصفحة، ثم «حفظ» و«إلغاء»، ثم قائمة التبويبات بعدهما
     std::vector<HWND> tab_order;
     for (const auto* vec : {&st.tab0_ctrls, &st.tab1_ctrls, &st.tab2_ctrls, &st.tab3_ctrls}) {
         tab_order.insert(tab_order.end(), vec->begin(), vec->end());
     }
-    tab_order.push_back(st.tab_ctrl);
     tab_order.push_back(btn_save);
     tab_order.push_back(btn_cancel);
+    tab_order.push_back(st.tab_ctrl);
 
     fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
-    SetFocus(st.combo_browse);
+    // النافذة تفتح دائماً على التبويب الأول والتركيز عليه، فيعرف القارئ أقسامها قبل أن يدخل في أي منها
+    SendMessageW(st.tab_ctrl, TCM_SETCURSEL, 0, 0);
+    SetFocus(st.tab_ctrl);
 
     MSG msg;
     while (IsWindow(dlg) && GetMessageW(&msg, nullptr, 0, 0)) {
@@ -1234,13 +1236,14 @@ inline GoToResult show_goto_dialog(
     SendMessageW(btn_cancel, WM_SETFONT, (WPARAM)ui_font, TRUE);
 
     std::vector<HWND> tab_order;
+    // كنافذة الخيارات: عناصر الصفحة، ثم «إغلاق»، ثم التبويبات؛ والنافذة تفتح على التبويب الأول
     for (int t = 0; t < 4; ++t) tab_order.insert(tab_order.end(), st.tab_ctrls[t].begin(), st.tab_ctrls[t].end());
-    tab_order.push_back(st.tab_ctrl);
     tab_order.push_back(btn_cancel);
+    tab_order.push_back(st.tab_ctrl);
 
     fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
-    SetFocus(st.combo_surah);
+    SetFocus(st.tab_ctrl);
 
     MSG msg;
     while (IsWindow(dlg) && GetMessageW(&msg, nullptr, 0, 0)) {
