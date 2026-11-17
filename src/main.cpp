@@ -157,6 +157,9 @@ struct AyahListItemData {
 // إجراء قائمة الآيات الأصلي (قبل الاستبدال) — يُستخدم لإكمال حركة الأسهم فوق الصفوف التكميلية
 static WNDPROC g_orig_ayah_list_proc = nullptr;
 
+static void draw_margin_mark(HDC hdc, const RECT& row, int top, int margin, bool on_logical_left,
+                             const std::vector<std::wstring>& lines, const ThemePalette& pal, HFONT font);
+
 class MushafAppWindow {
 public:
     HWND hwnd = nullptr;
@@ -235,6 +238,10 @@ public:
     HFONT font_line = nullptr;     // خط سطور الطبعة (أميري قرآن)، يُصغَّر حتى يتسع أطول سطر في الصفحة
     HFONT font_margin = nullptr;   // خط علامات الهامش
     bool pending_unit_skip = false;   // تقدّم العدّ بضغطات متتابعة دون بناء الوحدات التي بينها
+    // علامات الهامش خارج الإطار المذهّب (كحواشي المصحف الورقي) حين يتسع لها ما بين الإطار والسهم
+    bool marks_outside = false;
+    RECT mark_col_left{};          // عمودا العلامات بإحداثيات النافذة المنطقية، يسار الإطار المنطقي ويمينه
+    RECT mark_col_right{};
     int font_line_px = 0;
     HBRUSH brush_paper = nullptr;
     HBRUSH brush_toolbar = nullptr;
@@ -1013,12 +1020,12 @@ public:
         const SajdahPlace* sp = find_sajdah_place(a.verse_key);
         if (sp) {
             if (text.find(L"۩") == std::wstring::npos) text += L" ۩";
-            if (page_margin() == 0 && (!sp->is_agreed() || a.verse_key == L"41:37" || a.verse_key == L"41:38")) {
+            if (marks_inline() && (!sp->is_agreed() || a.verse_key == L"41:37" || a.verse_key == L"41:38")) {
                 std::wstring lbl = sajdah_short_label(a.verse_key, is_en());
                 text += L"  [" + (is_kfgqpc ? to_western_digits(lbl) : lbl) + L"]";
             }
         }
-        if (is_rub && page_margin() == 0) {
+        if (is_rub && marks_inline()) {
             std::wstring badge = division_badge_text(a, is_en());
             if (is_kfgqpc && !is_en()) badge = ordinals_for_quran_font(badge);
             if (!badge.empty()) text += L"  " + badge;
@@ -1073,7 +1080,58 @@ public:
 
     // عرض كل هامش من هامشي الصفحة، أو صفر إن ضاقت القائمة عنهما
     int page_margin() const {
+        if (marks_outside) return 0;
         return ayah_list_client_width() >= DS(kPageMarginMinList) ? DS(kPageMarginWidth) : 0;
+    }
+
+    // العلامة تُكتب بعد الآية في سطرها فقط إن لم يكن لها هامش داخل الإطار ولا خارجه
+    bool marks_inline() const { return !marks_outside && page_margin() == 0; }
+
+    void invalidate_outside_marks() {
+        if (!marks_outside) return;
+        InvalidateRect(hwnd, &mark_col_left, TRUE);
+        InvalidateRect(hwnd, &mark_col_right, TRUE);
+    }
+
+    // علامات الآيات الظاهرة الآن في عمودي الهامش خارج الإطار، كل علامة بمحاذاة أول سطر من آيتها
+    void paint_outside_marks(HDC hdc) const {
+        if (!marks_outside || !list_ayahs || showing_units || !IsWindowVisible(list_ayahs)) return;
+        DWORD old_layout = SetLayout(hdc, 0);
+        RECT client;
+        GetClientRect(hwnd, &client);
+        auto to_visual = [&](RECT r) {
+            if (old_layout & LAYOUT_RTL) {
+                LONG w = client.right - client.left;
+                RECT v = {w - r.right, r.top, w - r.left, r.bottom};
+                return v;
+            }
+            return r;
+        };
+        const RECT a = to_visual(mark_col_left), b = to_visual(mark_col_right);
+        const RECT vright = (a.left > b.left) ? a : b;
+        const RECT vleft = (a.left > b.left) ? b : a;
+        RECT lr;
+        GetClientRect(list_ayahs, &lr);
+        const int list_top = mark_col_left.top;
+        const int saved = SaveDC(hdc);
+        IntersectClipRect(hdc, 0, list_top, client.right, list_top + lr.bottom);
+        ThemePalette pal = get_theme_palette(effective_theme());
+        const int edge = DS(kAccentWidth) + DS(4);
+        const int count = (int)ayah_items.size();
+        for (int i = (int)SendMessageW(list_ayahs, LB_GETTOPINDEX, 0, 0); i >= 0 && i < count; ++i) {
+            RECT ir{};
+            if (SendMessageW(list_ayahs, LB_GETITEMRECT, i, (LPARAM)&ir) == LB_ERR || ir.top >= lr.bottom) break;
+            const auto& it = ayah_items[i];
+            if (it.kind != ListItemKind::Ayah || it.seg_index != 0 || it.mushaf_line) continue;
+            auto lines = margin_mark_lines(it.ayah);
+            if (lines.empty()) continue;
+            // الصفحة الفردية على اليمين المرئي، والزوجية على اليسار، كالمصحف المفتوح
+            const RECT col = ((it.ayah.page_number % 2) == 1) ? vright : vleft;
+            RECT row = {col.left - edge, list_top + ir.top, col.right, list_top + ir.bottom};
+            draw_margin_mark(hdc, row, row.top + DS(kRowPadY), (col.right - col.left) + edge + DS(6), true, lines, pal, font_margin);
+        }
+        RestoreDC(hdc, saved);
+        SetLayout(hdc, old_layout);
     }
 
     // ما يُكتب في الهامش بجوار الآية: علامة التقسيم (الجزء والحزب وأرباعه) والسجدة، سطراً سطراً
@@ -1513,6 +1571,7 @@ public:
         }
         SendMessageW(list_ayahs, WM_SETREDRAW, TRUE, 0);
         InvalidateRect(list_ayahs, nullptr, TRUE);
+        invalidate_outside_marks();
     }
 
     // أول صف لعنصر تالٍ (آية أو ترويسة) بعد الصف sel، أو -1 إن كان sel في آخر عنصر بالقائمة
@@ -2472,8 +2531,25 @@ public:
         // كل سهم عند الحافة الخارجية لهامشه (حافة النافذة، أو حافة الفهرس الجانبي إن ظهر)
         int lx = sb_vis ? (main_x + DS(2)) : DS(kArrowEdge);
         int rx = width - DS(kArrowEdge) - DS(kArrowDiameter);
-        // السهمان بجوار الصفحة نفسها؛ أما علامات ملء الشاشة والإغلاق فتبقى في ركني النافذة
-        const int ax_l = lx + page_shift, ax_r = rx - page_shift;
+        // علامات الهامش خارج الإطار إن اتسع لها ما بين الإطار والسهم (والسهمان حينئذ عند حافتي النافذة)
+        {
+            const int col_w = DS(kPageMarginWidth), gap = DS(6);
+            const int frame_out = frame_on ? DS(16) : DS(4);
+            const int outer_l = page_x - frame_out, outer_r = page_x + page_w + frame_out;
+            const int left_limit = arrows_on ? (lx + DS(kArrowDiameter) + DS(4)) : main_x;
+            const int right_limit = arrows_on ? (rx - DS(4)) : (width - DS(12));
+            const bool outside = (outer_l - gap - col_w >= left_limit) && (outer_r + gap + col_w <= right_limit);
+            if (outside != marks_outside) {
+                marks_outside = outside;
+                if (ayah_rows_width != 0) ayah_rows_width = -1;   // يُعاد بناء الصفوف بلا هامش داخلي أو به
+            }
+            mark_col_left = {outer_l - gap - col_w, list_y, outer_l - gap, list_y + list_h};
+            mark_col_right = {outer_r + gap, list_y, outer_r + gap + col_w, list_y + list_h};
+        }
+        // السهمان بجوار الصفحة نفسها (أو عند حافتي النافذة إن كانت العلامات بينهما وبين الإطار)؛
+        // أما علامات ملء الشاشة والإغلاق فتبقى في ركني النافذة
+        const int arrow_shift = marks_outside ? 0 : page_shift;
+        const int ax_l = lx + arrow_shift, ax_r = rx - arrow_shift;
         RECT logical_left = {ax_l, cy - r, ax_l + DS(kArrowDiameter), cy + r};
         RECT logical_right = {ax_r, cy - r, ax_r + DS(kArrowDiameter), cy + r};
         // في النافذة المعكوسة يكون الطرف المنطقي الأيمن هو اليسار المرئي
@@ -2692,7 +2768,37 @@ static void draw_margin_mark(HDC hdc, const RECT& row, int top, int margin, bool
     SelectObject(hdc, old_f);
 }
 
+// تفصيل الحروف: كل حرف وعدد مرات وروده، بترتيب الحروف (الألف الوصلية تُعدّ ألفاً)
+static std::wstring letter_frequency_text(const std::vector<const std::wstring*>& texts) {
+    std::map<wchar_t, int> freq;
+    for (const std::wstring* t : texts) {
+        for (wchar_t ch : *t) {
+            if ((ch >= 0x0621 && ch <= 0x064A) || ch == 0x0671) ++freq[ch == 0x0671 ? (wchar_t)0x0627 : ch];
+        }
+    }
+    std::wstring out;
+    for (const auto& kv : freq) {
+        if (!out.empty()) out += L"، ";
+        out += std::wstring(1, kv.first) + L" (" + std::to_wstring(kv.second) + L")";
+    }
+    return out;
+}
+
+static LRESULT CALLBACK AyahListSubclassProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam);
+
+// كلما تحرّك أول صف ظاهر في قائمة الآيات (تمرير أو انتقال) تُعاد رسم علامات الهامش خارج الإطار معها
 static LRESULT CALLBACK AyahListSubclassProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    const bool track = g_app && g_app->marks_outside && g_orig_ayah_list_proc;
+    const LRESULT before = track ? CallWindowProcW(g_orig_ayah_list_proc, hwnd, LB_GETTOPINDEX, 0, 0) : 0;
+    LRESULT r = AyahListSubclassProcImpl(hwnd, msg, wParam, lParam);
+    if (track && msg != WM_NCDESTROY && IsWindow(hwnd) &&
+        CallWindowProcW(g_orig_ayah_list_proc, hwnd, LB_GETTOPINDEX, 0, 0) != before) {
+        g_app->invalidate_outside_marks();
+    }
+    return r;
+}
+
+static LRESULT CALLBACK AyahListSubclassProcImpl(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     if (msg == WM_MOUSEMOVE && g_app) g_app->poke_controls();   // حركة الفأرة فوق النص تُظهر العلامات
     if (msg == WM_LBUTTONDOWN && g_app && g_app->settings.show_inline_copy_btn) {
         int mx = GET_X_LPARAM(lParam);
@@ -3011,6 +3117,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             DeleteObject(gold);
         }
         g_app->paint_mushaf_frame(hdc);
+        g_app->paint_outside_marks(hdc);
         g_app->paint_nav_arrows(hdc);
         return 1;
     }
@@ -3657,23 +3764,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             };
 
             auto st = count_stats(a->text_simple);
-            auto build_letter_freq = [](const std::wstring& simple_txt) -> std::wstring {
-                std::map<wchar_t, int> freq;
-                for (wchar_t ch : simple_txt) {
-                    if ((ch >= 0x0621 && ch <= 0x064A) || ch == 0x0671) {
-                        wchar_t n = ch;
-                        if (n == 0x0671) n = 0x0627;
-                        ++freq[n];
-                    }
-                }
-                std::wstring out;
-                for (const auto& kv : freq) {
-                    if (!out.empty()) out += L"، ";
-                    out += std::wstring(1, kv.first) + L" (" + std::to_wstring(kv.second) + L")";
-                }
-                return out;
-            };
-            std::wstring letter_freq = build_letter_freq(a->text_simple);
+            std::wstring letter_freq = letter_frequency_text({&a->text_simple});
             auto same_keys = g_app->db->find_same_text(a->text_simple);
             std::vector<std::wstring> other_places;
             for (const auto& k : same_keys) {
@@ -3801,6 +3892,9 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             int min_juz = 99, max_juz = 0, min_ruku = 9999, max_ruku = 0;
             int longest_ayah = 0, longest_letters = -1;
             int shortest_ayah = 0, shortest_letters = 999999;
+            std::vector<const std::wstring*> surah_texts;
+            for (const auto& ay : s_ayahs) surah_texts.push_back(&ay.text_simple);
+            const std::wstring surah_letter_freq = letter_frequency_text(surah_texts);
             for (const auto& ay : s_ayahs) {
                 min_juz = std::min(min_juz, ay.juz_number);
                 max_juz = std::max(max_juz, ay.juz_number);
@@ -3870,6 +3964,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"Rukus in Surah: " + std::to_wstring(ruku_cnt) + L" (Ruku " + std::to_wstring(min_ruku) + L" - " + std::to_wstring(max_ruku) + L")");
                 lines.push_back(L"Words: " + std::to_wstring(total_words));
                 lines.push_back(L"Letter Counter: " + std::to_wstring(total_letters) + L" letters (without diacritics/spaces)");
+                if (!surah_letter_freq.empty()) lines.push_back(L"Letter Breakdown in the Surah: " + surah_letter_freq);
                 if (longest_ayah > 0) {
                     lines.push_back(L"Longest Ayah: Ayah " + std::to_wstring(longest_ayah) + L" (" + std::to_wstring(longest_letters) + L" letters) • Shortest Ayah: Ayah " + std::to_wstring(shortest_ayah) + L" (" + std::to_wstring(shortest_letters) + L" letters)");
                 }
@@ -3895,6 +3990,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"الركوعات في السورة: " + std::to_wstring(ruku_cnt) + L" ركوعاً (من الركوع " + std::to_wstring(min_ruku) + L" إلى " + std::to_wstring(max_ruku) + L")");
                 lines.push_back(L"إجمالي الكلمات: " + std::to_wstring(total_words) + L" كلمة");
                 lines.push_back(L"عداد الحروف في السورة: " + std::to_wstring(total_letters) + L" حرفاً (دون التشكيل والمسافات)");
+                if (!surah_letter_freq.empty()) lines.push_back(L"تفصيل الحروف في السورة: " + surah_letter_freq);
                 if (longest_ayah > 0) {
                     lines.push_back(L"أطول آية: الآية " + std::to_wstring(longest_ayah) + L" (" + std::to_wstring(longest_letters) + L" حرفاً) • أقصر آية: الآية " + std::to_wstring(shortest_ayah) + L" (" + std::to_wstring(shortest_letters) + L" حرفاً)");
                 }
@@ -4161,6 +4257,19 @@ static int run_self_test() {
     AyahInfo alm;
     SELFTEST_CHECK(app.db->get_ayah(2, 1, alm));
     SELFTEST_CHECK(prepare_ayah_for_screen_reader(alm, true, false) == L"الم");
+    {
+        // النسخ بعلامات الوقف أو بدونها: الحروف والتشكيل كما هي، وتسقط العلامات وحدها
+        AyahInfo dhalika;
+        SELFTEST_CHECK(app.db->get_ayah(2, 2, dhalika));
+        const std::wstring with_w = format_ayah_custom(dhalika, L"uthmani", false, false, true, 1);
+        const std::wstring no_w = format_ayah_custom(dhalika, L"uthmani", false, false, true, 0);
+        SELFTEST_CHECK(with_w.find(L'ۛ') != std::wstring::npos);
+        SELFTEST_CHECK(no_w.find(L'ۛ') == std::wstring::npos);
+        SELFTEST_CHECK(no_w.find(L"  ") == std::wstring::npos);
+        std::wstring stripped = with_w;
+        stripped.erase(std::remove(stripped.begin(), stripped.end(), L'ۛ'), stripped.end());
+        SELFTEST_CHECK(join_words(split_words(stripped), L" ") == no_w);
+    }
     SELFTEST_CHECK(prepare_ayah_for_screen_reader(alm, true, true) == L"أَلِفْ لَامْ مِيمْ");
 
     // علامات الوقف: مُسقطة افتراضياً، وتُنطق بأسمائها عند تفعيل الخيار (البقرة ٢: لا ريب ۛ فيه ۛ)
@@ -4496,6 +4605,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
     mushaf::g_app = &app;
     app.resolve_paths();
     app.settings.load();
+    mushaf::copy_waqf_marks_enabled() = app.settings.copy_waqf_marks;
     app.load_private_fonts();
     mushaf::ScreenReaderEngine::instance().init(app.app_dir);
 

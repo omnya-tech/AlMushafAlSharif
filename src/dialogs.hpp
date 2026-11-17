@@ -402,6 +402,7 @@ struct OptionsDlgState {
     HWND chk_brackets = nullptr;
     HWND chk_reference = nullptr;
     HWND chk_arabic_digits = nullptr;
+    HWND chk_waqf_marks = nullptr;
     HWND lbl_preview = nullptr;
 
     // Tab 1: الخط والمظهر
@@ -533,10 +534,11 @@ static void update_options_copy_preview(OptionsDlgState* st) {
     bool brackets = (SendMessageW(st->chk_brackets, BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool reference = (SendMessageW(st->chk_reference, BM_GETCHECK, 0, 0) == BST_CHECKED);
     bool ar_digits = (SendMessageW(st->chk_arabic_digits, BM_GETCHECK, 0, 0) == BST_CHECKED);
+    bool waqf = (SendMessageW(st->chk_waqf_marks, BM_GETCHECK, 0, 0) == BST_CHECKED);
 
     std::wstring txt;
     if (st->sample_ayah) {
-        txt = format_ayah_custom(*st->sample_ayah, script, brackets, reference, ar_digits);
+        txt = format_ayah_custom(*st->sample_ayah, script, brackets, reference, ar_digits, waqf ? 1 : 0);
     } else {
         std::wstring core = (script == L"uthmani" || script == L"qpc")
             ? L"ٱلْحَمْدُ لِلَّهِ رَبِّ ٱلْعَـٰلَمِينَ"
@@ -635,6 +637,8 @@ static LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             st->settings->copy_brackets = (SendMessageW(st->chk_brackets, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->copy_reference = (SendMessageW(st->chk_reference, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->copy_arabic_digits = (SendMessageW(st->chk_arabic_digits, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            st->settings->copy_waqf_marks = (SendMessageW(st->chk_waqf_marks, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            copy_waqf_marks_enabled() = st->settings->copy_waqf_marks;
 
             static const wchar_t* fonts[5] = {
                 L"KFGQPC HAFS Uthmanic Script", L"Amiri Quran", L"Amiri", L"Scheherazade New", L"Kitab"
@@ -810,8 +814,11 @@ inline bool show_options_dialog(
     st.chk_arabic_digits = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Use Arabic-Indic digits (١٢٣) instead of (123)" : L"استخدام الأرقام العربية المشرقية (١٢٣) بدلاً من (123)", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 338, 640, 26, dlg, (HMENU)613, hInst, nullptr));
     SendMessageW(st.chk_arabic_digits, BM_SETCHECK, settings.copy_arabic_digits ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Copy preview:" : L"معاينة النسخ:", WS_CHILD | WS_VISIBLE, 32, 378, 120, 26, dlg, nullptr, hInst, nullptr));
-    st.lbl_preview = add_ctrl(st.tab0_ctrls, CreateWindowExW(WS_EX_CLIENTEDGE | (is_en ? WS_EX_RTLREADING : 0), L"STATIC", L"", WS_CHILD | WS_VISIBLE | (is_en ? SS_RIGHT : SS_LEFT), 160, 374, 520, 64, dlg, nullptr, hInst, nullptr));
+    st.chk_waqf_marks = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Copy the pause marks with the ayah (such as صلى, قلى, ج)" : L"نسخ علامات الوقف مع الآية (مثل: صلى، قلى، ج)", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 368, 640, 26, dlg, (HMENU)614, hInst, nullptr));
+    SendMessageW(st.chk_waqf_marks, BM_SETCHECK, settings.copy_waqf_marks ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Copy preview:" : L"معاينة النسخ:", WS_CHILD | WS_VISIBLE, 32, 408, 120, 26, dlg, nullptr, hInst, nullptr));
+    st.lbl_preview = add_ctrl(st.tab0_ctrls, CreateWindowExW(WS_EX_CLIENTEDGE | (is_en ? WS_EX_RTLREADING : 0), L"STATIC", L"", WS_CHILD | WS_VISIBLE | (is_en ? SS_RIGHT : SS_LEFT), 160, 404, 520, 64, dlg, nullptr, hInst, nullptr));
 
     // ---------------- Tab 1: الخط والمظهر ----------------
     // محاذاة السطور أول خيار في الصفحة، والتوسيط كالمصحف هو الافتراضي

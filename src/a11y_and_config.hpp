@@ -258,6 +258,7 @@ struct AppSettings {
     bool copy_brackets = true;
     bool copy_reference = true;
     bool copy_arabic_digits = true;
+    bool copy_waqf_marks = true;     // نسخ علامات الوقف مع الآية
     std::wstring browse_scope = L"surah";    // surah | page | juz | hizb | rub | manzil | ruku
     std::wstring default_browse_mode = L"surah";
     std::wstring doc_alignment = L"center";  // center (كالمصحف، الافتراضي) | right
@@ -371,6 +372,7 @@ struct AppSettings {
         get_bool("copy_brackets", copy_brackets);
         get_bool("copy_reference", copy_reference);
         get_bool("copy_arabic_digits", copy_arabic_digits);
+        get_bool("copy_waqf_marks", copy_waqf_marks);
         get_str("browse_scope", browse_scope);
         if (!is_valid_browse_scope(browse_scope)) browse_scope = L"surah";
         default_browse_mode = browse_scope;
@@ -479,6 +481,7 @@ struct AppSettings {
         oss << "  \"copy_brackets\": " << (copy_brackets ? "true" : "false") << ",\n";
         oss << "  \"copy_reference\": " << (copy_reference ? "true" : "false") << ",\n";
         oss << "  \"copy_arabic_digits\": " << (copy_arabic_digits ? "true" : "false") << ",\n";
+        oss << "  \"copy_waqf_marks\": " << (copy_waqf_marks ? "true" : "false") << ",\n";
         oss << "  \"browse_scope\": \"" << json_escape(browse_scope) << "\",\n";
         oss << "  \"default_browse_mode\": \"" << json_escape(default_browse_mode) << "\",\n";
         oss << "  \"doc_alignment\": \"" << json_escape(doc_alignment) << "\",\n";

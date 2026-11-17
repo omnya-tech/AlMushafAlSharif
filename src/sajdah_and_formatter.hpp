@@ -274,12 +274,19 @@ inline std::wstring build_ayah_accessible_name(
     return tail.empty() ? spoken : (spoken + L" — " + tail);
 }
 
+// نسخ علامات الوقف (صلى، قلى، ج، م، لا، التعانق، السكتة) مع الآية: إعداد عام يضبطه البرنامج من الخيارات
+inline bool& copy_waqf_marks_enabled() {
+    static bool on = true;
+    return on;
+}
+
 inline std::wstring format_ayah_custom(
     const AyahInfo& ayah,
     const std::wstring& script = L"uthmani",
     bool brackets = true,
     bool reference = true,
-    bool arabic_digits = true
+    bool arabic_digits = true,
+    int waqf_marks = -1   // -1: بحسب الإعداد العام، 0: بدونها، 1: معها (لمعاينة الخيارات قبل حفظها)
 ) {
     std::wstring core;
     if (script == L"qpc") core = ayah.text_qpc_clean;
@@ -288,6 +295,16 @@ inline std::wstring format_ayah_custom(
     else core = ayah.text_uthmani;
 
     replace_all(core, L"۞", L"");
+    const bool keep_waqf = (waqf_marks < 0) ? copy_waqf_marks_enabled() : (waqf_marks != 0);
+    if (!keep_waqf) {
+        std::wstring kept;
+        kept.reserve(core.size());
+        for (wchar_t ch : core) {
+            if (ch >= 0x06D6 && ch <= 0x06DC) continue;   // علامات الوقف وحدها، دون الحروف والتشكيل
+            kept.push_back(ch);
+        }
+        core.swap(kept);
+    }
     core = join_words(split_words(core), L" ");
 
     std::wstring body = brackets ? (L"﴿ " + core + L" ﴾") : core;
