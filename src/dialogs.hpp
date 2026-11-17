@@ -6,7 +6,7 @@
 #define _UNICODE
 #endif
 
-#include "utf8_util.hpp"   // أولاً: يعرّف NOMINMAX قبل windows.h
+#include "utf8_util.hpp"   // أولًا: يعرّف NOMINMAX قبل windows.h
 #include <windows.h>
 #include <commctrl.h>
 #include <string>
@@ -43,7 +43,7 @@ inline void send_tab_to_back(HWND tab) {
     if (tab) SetWindowPos(tab, HWND_BOTTOM, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
-// هل يعمل البرنامج بمظهر ويندوز الحديث؟ (يُحمَّل ديناميكياً ليبقى متوافقاً مع كل الأنظمة)
+// هل يعمل البرنامج بمظهر ويندوز الحديث؟ (يُحمَّل ديناميكيًا ليبقى متوافقًا مع كل الأنظمة)
 inline bool app_is_themed() {
     using fn_t = BOOL(WINAPI*)();
     static int cached = -1;
@@ -141,7 +141,7 @@ static LRESULT CALLBACK LineListSubclassProc(HWND hwnd, UINT msg, WPARAM wParam,
             if (sel >= 0 && sel < (int)st->lines.size()) {
                 set_clipboard_text(GetParent(hwnd), st->lines[sel]);
                 if (st->sr) {
-                    st->sr->speak(st->is_en ? L"Copied current line" : L"تم نسخ السطر الحالي", true);
+                    st->sr->speak(st->is_en ? L"Copied current line" : L"نُسخ السطر الحالي", true);
                 }
             }
             return 0;
@@ -269,7 +269,7 @@ static LRESULT CALLBACK LineReaderWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
             int sel = (int)SendMessageW(st->list_hwnd, LB_GETCURSEL, 0, 0);
             if (sel >= 0 && sel < (int)st->lines.size()) {
                 set_clipboard_text(hwnd, st->lines[sel]);
-                if (st->sr) st->sr->speak(st->is_en ? L"Copied current line" : L"تم نسخ السطر الحالي", true);
+                if (st->sr) st->sr->speak(st->is_en ? L"Copied current line" : L"نُسخ السطر الحالي", true);
             }
             return 0;
         }
@@ -280,7 +280,7 @@ static LRESULT CALLBACK LineReaderWndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
                 all += st->lines[i];
             }
             set_clipboard_text(hwnd, all);
-            if (st->sr) st->sr->speak(st->is_en ? L"Copied all lines" : L"تم نسخ المعلومات", true);
+            if (st->sr) st->sr->speak(st->is_en ? L"Copied all lines" : L"نُسخت المعلومات", true);
             return 0;
         }
         break;
@@ -329,9 +329,9 @@ inline void show_line_reader_dialog(
     SetWindowLongPtrW(dlg, GWLP_USERDATA, (LONG_PTR)&st);
 
     st.list_hwnd = CreateWindowExW(
-        WS_EX_CLIENTEDGE /* النافذة المعكوسة تقرأ من اليمين أصلاً */,
+        WS_EX_CLIENTEDGE /* النافذة المعكوسة تقرأ من اليمين أصلًا */,
         L"LISTBOX", L"",
-        kWrappedListStyle,   // يرسمها البرنامج بالتفاف، ويقرؤها قارئ الشاشة نصاً
+        kWrappedListStyle,   // يرسمها البرنامج بالتفاف، ويقرؤها قارئ الشاشة نصًا
         16, 16, 718, 424, dlg, (HMENU)200, GetModuleHandleW(nullptr), nullptr
     );
     SendMessageW(st.list_hwnd, WM_SETFONT, (WPARAM)ui_font, TRUE);
@@ -513,7 +513,7 @@ static LRESULT CALLBACK ShortcutCaptureProc(HWND hwnd, UINT msg, WPARAM wParam, 
         std::wstring cmd_lbl = st->is_en ? defs[sel].label_en : defs[sel].label_ar;
         std::wstring ok_msg = st->is_en
             ? (L"Assigned " + new_spec + L" to " + cmd_lbl)
-            : (L"تم تعيين " + new_spec + L" لأمر: " + cmd_lbl);
+            : (L"عُيِّن " + new_spec + L" للأمر: " + cmd_lbl);
         if (st->lbl_shortcut_status) SetWindowTextW(st->lbl_shortcut_status, ok_msg.c_str());
         ScreenReaderEngine::instance().speak(ok_msg, true, st->settings->sapi_fallback);
         return 0;
@@ -596,7 +596,7 @@ static LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
                 refresh_options_shortcuts_list(st, sel);
                 std::wstring msg_txt = st->is_en
                     ? (L"Reset to default: " + defs[sel].default_spec)
-                    : (L"تمت استعادة الافتراضي: " + defs[sel].default_spec);
+                    : (L"استُعيد الاختصار الافتراضي: " + defs[sel].default_spec);
                 if (st->lbl_shortcut_status) SetWindowTextW(st->lbl_shortcut_status, msg_txt.c_str());
                 ScreenReaderEngine::instance().speak(msg_txt, true, st->settings->sapi_fallback);
             }
@@ -607,7 +607,7 @@ static LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             refresh_options_shortcuts_list(st);
             std::wstring msg_txt = st->is_en
                 ? L"All shortcuts reset to defaults."
-                : L"تمت استعادة جميع الاختصارات الافتراضية.";
+                : L"استُعيدت الاختصارات الافتراضية كلها.";
             if (st->lbl_shortcut_status) SetWindowTextW(st->lbl_shortcut_status, msg_txt.c_str());
             ScreenReaderEngine::instance().speak(msg_txt, true, st->settings->sapi_fallback);
             return 0;
@@ -758,7 +758,7 @@ inline bool show_options_dialog(
     int pr = page_count % 100;
     std::wstring pages_ar_lbl = L"الصفحات (" + to_arabic_digits(page_count) + ((pr >= 3 && pr <= 10) ? L" صفحات)" : L" صفحة)");
     std::wstring pages_en_lbl = L"Pages (" + std::to_wstring(page_count) + L")";
-    const wchar_t* bm_ar[7] = {L"السور (١١٤ سورة)", pages_ar_lbl.c_str(), L"الأجزاء (٣٠ جزءاً)", L"الأحزاب (٦٠ حزباً)", L"الأرباع (٢٤٠ ربعاً)", L"المنازل السبعة (ختمة الأسبوع)", L"الركوعات (٥٥٨ ركوعاً)"};
+    const wchar_t* bm_ar[7] = {L"السور (١١٤ سورة)", pages_ar_lbl.c_str(), L"الأجزاء (٣٠ جزءًا)", L"الأحزاب (٦٠ حزبًا)", L"الأرباع (٢٤٠ ربعًا)", L"المنازل السبعة (ختمة الأسبوع)", L"الركوعات (٥٥٨ ركوعًا)"};
     const wchar_t* bm_en[7] = {L"Surahs (114)", pages_en_lbl.c_str(), L"Juz (30)", L"Hizb (60)", L"Quarters (240)", L"Seven Manzils (weekly reading)", L"Rukus (558)"};
     const wchar_t* bm_keys[7] = {L"surah", L"page", L"juz", L"hizb", L"rub", L"manzil", L"ruku"};
     int bm_sel = 0;
@@ -794,7 +794,7 @@ inline bool show_options_dialog(
 
     add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Copied script:" : L"نوع رسم الآية عند النسخ:", WS_CHILD | WS_VISIBLE, 32, 242, 210, 26, dlg, nullptr, hInst, nullptr));
     st.combo_copy_script = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, 250, 238, 430, 200, dlg, (HMENU)610, hInst, nullptr));
-    // النص القرآني يُنسخ مشكولاً دائماً
+    // النص القرآني يُنسخ مشكولًا دائمًا
     const wchar_t* cs_ar[3] = {L"الرسم العثماني المشكول (مصحف المدينة)", L"رسم حفص (مجمع الملك فهد)", L"الرسم الإملائي المشكول"};
     const wchar_t* cs_en[3] = {L"Uthmani script with diacritics", L"King Fahd Complex Hafs script", L"Standard Arabic with diacritics"};
     const wchar_t* cs_keys[3] = {L"uthmani", L"qpc", L"imlaei"};
@@ -811,7 +811,7 @@ inline bool show_options_dialog(
     st.chk_reference = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Add the surah name and ayah number after the text [surah: ayah]" : L"إضافة اسم السورة ورقم الآية بعد النص [السورة: الآية]", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 308, 640, 26, dlg, (HMENU)612, hInst, nullptr));
     SendMessageW(st.chk_reference, BM_SETCHECK, settings.copy_reference ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    st.chk_arabic_digits = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Use Arabic-Indic digits (١٢٣) instead of (123)" : L"استخدام الأرقام العربية المشرقية (١٢٣) بدلاً من (123)", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 338, 640, 26, dlg, (HMENU)613, hInst, nullptr));
+    st.chk_arabic_digits = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Use Arabic-Indic digits (١٢٣) instead of (123)" : L"استخدام الأرقام العربية المشرقية (١٢٣) بدلًا من (123)", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 338, 640, 26, dlg, (HMENU)613, hInst, nullptr));
     SendMessageW(st.chk_arabic_digits, BM_SETCHECK, settings.copy_arabic_digits ? BST_CHECKED : BST_UNCHECKED, 0);
 
     st.chk_waqf_marks = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Copy the pause marks with the ayah (such as صلى, قلى, ج)" : L"نسخ علامات الوقف مع الآية (مثل: صلى، قلى، ج)", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 368, 640, 26, dlg, (HMENU)614, hInst, nullptr));
@@ -863,14 +863,14 @@ inline bool show_options_dialog(
     }
     SendMessageW(st.combo_theme, CB_SETCURSEL, th_sel, 0);
 
-    st.chk_letter_count = add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Show Arabic letter counter for each ayah (visual and screen reader)" : L"إظهار عداد الحروف لكل آية (في العرض وقارئ الشاشة)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 306, 640, 28, dlg, (HMENU)625, hInst, nullptr));
+    st.chk_letter_count = add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Show Arabic letter counter for each ayah (visual and screen reader)" : L"إظهار عدد حروف كل آية (على الشاشة ولقارئ الشاشة)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 306, 640, 28, dlg, (HMENU)625, hInst, nullptr));
     SendMessageW(st.chk_letter_count, BM_SETCHECK, settings.show_ayah_letter_count ? BST_CHECKED : BST_UNCHECKED, 0);
 
     // ---------------- Tab 2: قارئات الشاشة ----------------
-    st.chk_sr_auto_speak = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Read the ayah automatically when you move to it with the arrows" : L"نطق الآية تلقائياً عبر قارئ الشاشة فور الوقوف عليها بالأسهم", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 70, 640, 28, dlg, (HMENU)630, hInst, nullptr));
+    st.chk_sr_auto_speak = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Read the ayah automatically when you move to it with the arrows" : L"نطق الآية تلقائيًا عبر قارئ الشاشة فور الوقوف عليها بالأسهم", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 70, 640, 28, dlg, (HMENU)630, hInst, nullptr));
     SendMessageW(st.chk_sr_auto_speak, BM_SETCHECK, settings.sr_auto_speak_ayah ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    st.chk_sr_phonetic = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Improve the screen reader's pronunciation of Uthmani script words" : L"تحسين النطق الصوتي لكلمات الرسم العثماني (مثل: الرحمٰن، العٰلمين، ذٰلك) لقارئ الشاشة", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 110, 640, 28, dlg, (HMENU)631, hInst, nullptr));
+    st.chk_sr_phonetic = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Improve the screen reader's pronunciation of Uthmani script words" : L"تحسين نطق قارئ الشاشة لكلمات الرسم العثماني (مثل: الرحمٰن، العٰلمين، ذٰلك)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 110, 640, 28, dlg, (HMENU)631, hInst, nullptr));
     SendMessageW(st.chk_sr_phonetic, BM_SETCHECK, settings.sr_phonetic_norm ? BST_CHECKED : BST_UNCHECKED, 0);
 
     st.chk_sr_muqattaat = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Spell out the disjointed letters at the start of surahs as letter names (such as الم and كهيعص)" : L"تفكيك الحروف المقطعة في فواتح السور إلى أسمائها ككلمات (مثل: الم ← ألف لام ميم، كهيعص)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 150, 640, 28, dlg, (HMENU)632, hInst, nullptr));
@@ -879,11 +879,11 @@ inline bool show_options_dialog(
     st.chk_sr_waqf = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Read the pause marks by their names as written in the Mushaf (such as صلى, قلى, ج)" : L"نطق علامات الوقف بأسمائها كما في المصحف (مثل: صلى، قلى، ج، لا)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 190, 640, 28, dlg, (HMENU)634, hInst, nullptr));
     SendMessageW(st.chk_sr_waqf, BM_SETCHECK, settings.sr_speak_waqf ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    st.chk_sapi = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Use the built-in Windows voice when no screen reader is running" : L"تشغيل صوت ويندوز المدمج في حال عدم تشغيل قارئ شاشة خارجي", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 230, 640, 28, dlg, (HMENU)633, hInst, nullptr));
+    st.chk_sapi = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Use the built-in Windows voice when no screen reader is running" : L"استخدام صوت ويندوز المدمج إذا لم يكن قارئ شاشة يعمل", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 230, 640, 28, dlg, (HMENU)633, hInst, nullptr));
     SendMessageW(st.chk_sapi, BM_SETCHECK, settings.sapi_fallback ? BST_CHECKED : BST_UNCHECKED, 0);
 
     // ---------------- Tab 3: تخصيص الاختصارات ----------------
-    add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Select a command, then move to the shortcut box and press the new keys (Ctrl/Alt/F1-F12):" : L"اختر الأمر من القائمة، ثم انتقل لمربع الاختصار واضغط المفاتيح الجديدة (Ctrl / Alt / F1-F12):", WS_CHILD, 32, 56, 650, 24, dlg, nullptr, hInst, nullptr));
+    add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Select a command, then move to the shortcut box and press the new keys (Ctrl/Alt/F1-F12):" : L"اختر الأمر من القائمة، ثم انتقل إلى مربع الاختصار واضغط المفاتيح الجديدة (Ctrl / Alt / F1-F12):", WS_CHILD, 32, 56, 650, 24, dlg, nullptr, hInst, nullptr));
     st.list_shortcuts = add_ctrl(st.tab3_ctrls, CreateWindowExW(WS_EX_CLIENTEDGE, L"LISTBOX", L"", WS_CHILD | WS_TABSTOP | WS_VSCROLL | LBS_NOTIFY, 32, 86, 650, 220, dlg, (HMENU)640, hInst, nullptr));
 
     add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"New shortcut (press keys):" : L"الاختصار الجديد (اضغط المفاتيح):", WS_CHILD, 32, 320, 210, 26, dlg, nullptr, hInst, nullptr));
@@ -891,8 +891,8 @@ inline bool show_options_dialog(
     SetWindowLongPtrW(st.edit_shortcut_capture, GWLP_USERDATA, (LONG_PTR)&st);
     st.orig_capture_proc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(st.edit_shortcut_capture, GWLP_WNDPROC, (LONG_PTR)ShortcutCaptureProc));
 
-    st.btn_sc_reset_one = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Reset Selected" : L"استعادة الافتراضي للأمر", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 462, 315, 220, 30, dlg, (HMENU)642, hInst, nullptr));
-    st.btn_sc_reset_all = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Reset All Shortcuts" : L"استعادة جميع الاختصارات", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 462, 354, 220, 30, dlg, (HMENU)643, hInst, nullptr));
+    st.btn_sc_reset_one = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Reset Selected" : L"استعادة اختصار الأمر الأصلي", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 462, 315, 220, 30, dlg, (HMENU)642, hInst, nullptr));
+    st.btn_sc_reset_all = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Reset All Shortcuts" : L"استعادة الاختصارات الأصلية كلها", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 462, 354, 220, 30, dlg, (HMENU)643, hInst, nullptr));
     st.lbl_shortcut_status = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Screen-reader safe validation is active." : L"التحقق التلقائي من توافق الاختصار مع قارئات الشاشة مفعّل.", WS_CHILD, 32, 358, 420, 48, dlg, nullptr, hInst, nullptr));
     refresh_options_shortcuts_list(&st, 0);
 
@@ -924,7 +924,7 @@ inline bool show_options_dialog(
 
     fit_dialog_to_screen(dlg, parent);   // مقاسات الشاشة الحالية، وداخل حدودها
     EnableWindow(parent, FALSE);
-    // النافذة تفتح دائماً على التبويب الأول والتركيز عليه، فيعرف القارئ أقسامها قبل أن يدخل في أي منها
+    // النافذة تفتح دائمًا على التبويب الأول والتركيز عليه، فيعرف القارئ أقسامها قبل أن يدخل في أي منها
     SendMessageW(st.tab_ctrl, TCM_SETCURSEL, 0, 0);
     SetFocus(st.tab_ctrl);
 
@@ -1323,7 +1323,7 @@ static void run_search_now(HWND /*hwnd*/, SearchDlgState* st, bool keep_focus_an
     if (keep_focus_and_silent && query.empty()) return;
     if (query.find_first_not_of(L" \t") == std::wstring::npos) {
         std::wstring hint = st->is_en ? L"Type a word or a reference (such as 2:255) first, then press Enter."
-                                      : L"اكتب كلمة البحث أو المرجع أولاً (مثل ٢:٢٥٥) ثم اضغط Enter.";
+                                      : L"اكتب كلمة البحث أو المرجع أولًا (مثل ٢:٢٥٥) ثم اضغط Enter.";
         SetWindowTextW(st->lbl_status, hint.c_str());
         if (st->sr) st->sr->speak(hint, true);
         SetFocus(st->edit_query);
@@ -1354,14 +1354,14 @@ static void run_search_now(HWND /*hwnd*/, SearchDlgState* st, bool keep_focus_an
     std::wstring status_txt;
     if (n == 0) {
         status_txt = st->is_en ? L"No matching ayahs. Try fewer words or another spelling."
-                               : L"لم يُعثر على آيات مطابقة. جرّب كلمات أقل أو كتابة أخرى للكلمة.";
+                               : L"لم يُعثر على آيات مطابقة. جرّب كلمات أقل، أو صيغة أخرى للكلمة.";
     } else if (n >= 250) {
         status_txt = st->is_en ? L"Showing the first 250 matching ayahs — choose a surah under Within to see the rest."
-                               : L"عُرضت أول ٢٥٠ آية مطابقة — حدّد سورة من «نطاق البحث» لترى البقية.";
+                               : L"عُرضت أول ٢٥٠ آية مطابقة — اختر سورة من «نطاق البحث» لترى بقيتها.";
     } else {
         status_txt = st->is_en
             ? (L"Found " + std::to_wstring(n) + L" matching ayahs — press the down arrow to browse them.")
-            : (L"تم العثور على " + to_arabic_digits((int)n) + L" آية مطابقة — اضغط السهم للأسفل لتصفح النتائج.");
+            : (L"عدد الآيات المطابقة: " + to_arabic_digits((int)n) + L" — اضغط السهم لأسفل لتصفّح النتائج.");
     }
     SetWindowTextW(st->lbl_status, status_txt.c_str());
     if (st->sr && !keep_focus_and_silent) st->sr->speak(status_txt, true);
@@ -1397,7 +1397,7 @@ static LRESULT CALLBACK SearchWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                 );
                 set_clipboard_text(hwnd, formatted);
                 if (st->sr) {
-                    st->sr->speak(st->is_en ? L"Copied selected ayah" : L"تم نسخ الآية المحددة إلى الحافظة", true);
+                    st->sr->speak(st->is_en ? L"Copied selected ayah" : L"نُسخت الآية المحددة", true);
                 }
             }
             return 0;
@@ -1468,7 +1468,7 @@ inline SearchDlgResult show_search_dialog(
         WS_CHILD | WS_VISIBLE, 16, 18, 150, 26, dlg, nullptr, GetModuleHandleW(nullptr), nullptr
     );
     st.edit_query = CreateWindowExW(
-        WS_EX_CLIENTEDGE /* النافذة المعكوسة تقرأ من اليمين أصلاً */, L"EDIT", L"",
+        WS_EX_CLIENTEDGE /* النافذة المعكوسة تقرأ من اليمين أصلًا */, L"EDIT", L"",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_AUTOHSCROLL,
         170, 14, 250, 30, dlg, (HMENU)401, GetModuleHandleW(nullptr), nullptr
     );
@@ -1499,7 +1499,7 @@ inline SearchDlgResult show_search_dialog(
     );
 
     st.list_results = CreateWindowExW(
-        WS_EX_CLIENTEDGE /* النافذة المعكوسة تقرأ من اليمين أصلاً */, L"LISTBOX", L"",
+        WS_EX_CLIENTEDGE /* النافذة المعكوسة تقرأ من اليمين أصلًا */, L"LISTBOX", L"",
         kWrappedListStyle,   // النتيجة الطويلة تلتفّ بدل أن تنقطع
         16, 86, 814, 396, dlg, (HMENU)405, GetModuleHandleW(nullptr), nullptr
     );
@@ -1567,7 +1567,7 @@ static void refresh_bookmarks_dialog_ui(BookmarksDlgState* st) {
     if (!has_khatmah) {
         SetWindowTextW(st->lbl_khatmah_info, st->is_en
             ? L"No reading mark set yet. Press M or Ctrl+M while reading to mark the ayah where you stopped."
-            : L"لم يتم تحديد فاصل الختمة بعد. اضغط M أو Ctrl+M أثناء القراءة لوضع علامة التوقف عند الآية التي وصلت إليها.");
+            : L"لم يُحدَّد فاصل الختمة بعد. اضغط M أو Ctrl+M أثناء القراءة لتضع علامة التوقف عند الآية التي وصلت إليها.");
         EnableWindow(st->btn_resume_khatmah, FALSE);
         EnableWindow(st->btn_remove_khatmah, FALSE);
     } else {
@@ -1661,7 +1661,7 @@ static LRESULT CALLBACK BookmarksWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
             st->settings->save();
             refresh_bookmarks_dialog_ui(st);
             if (st->sr) st->sr->speak(st->is_en ? L"Reading mark removed" : L"تمت إزالة فاصل الختمة", true);
-            // الزر صار معطلاً، فلا يبقى التركيز عليه
+            // الزر صار معطلًا، فلا يبقى التركيز عليه
             if (foc == st->btn_remove_khatmah) SetFocus(st->list_hwnd);
             return 0;
         }
@@ -1688,7 +1688,7 @@ static LRESULT CALLBACK BookmarksWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
                     st->settings->copy_reference, st->settings->copy_arabic_digits
                 );
                 set_clipboard_text(hwnd, formatted);
-                if (st->sr) st->sr->speak(st->is_en ? L"Copied bookmarked ayah" : L"تم نسخ الآية إلى الحافظة", true);
+                if (st->sr) st->sr->speak(st->is_en ? L"Copied bookmarked ayah" : L"نُسخت الآية", true);
             }
             return 0;
         }
@@ -1699,7 +1699,7 @@ static LRESULT CALLBACK BookmarksWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPA
                 if (it != st->settings->bookmarks.end()) st->settings->bookmarks.erase(it);
                 st->settings->save();
                 refresh_bookmarks_dialog_ui(st);
-                if (st->sr) st->sr->speak(st->is_en ? L"Bookmark removed" : L"تم حذف العلامة", true);
+                if (st->sr) st->sr->speak(st->is_en ? L"Bookmark removed" : L"حُذفت العلامة", true);
             }
             return 0;
         }
@@ -1785,7 +1785,7 @@ inline SearchDlgResult show_bookmarks_dialog(
         WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 16, 158, 738, 354, dlg, nullptr, hInst, nullptr
     );
     st.list_hwnd = CreateWindowExW(
-        WS_EX_CLIENTEDGE /* النافذة المعكوسة تقرأ من اليمين أصلاً */, L"LISTBOX", L"",
+        WS_EX_CLIENTEDGE /* النافذة المعكوسة تقرأ من اليمين أصلًا */, L"LISTBOX", L"",
         kWrappedListStyle,
         30, 186, 708, 266, dlg, (HMENU)500, hInst, nullptr
     );
@@ -1908,7 +1908,7 @@ inline bool show_sajdah_navigator_dialog(
     DWORD ex_style = WS_EX_DLGMODALFRAME | (is_en ? 0 : (WS_EX_LAYOUTRTL | WS_EX_RTLREADING));
     HWND dlg = CreateWindowExW(
         ex_style, L"MushafSajdahNavDlg",
-        is_en ? L"Sajdah Places in the Quran (15)" : L"مواضع سجدات التلاوة في القرآن (١٥ موضعاً)",
+        is_en ? L"Sajdah Places in the Quran (15)" : L"مواضع سجدات التلاوة في القرآن (١٥ موضعًا)",
         WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
         180, 110, 740, 480, parent, nullptr, GetModuleHandleW(nullptr), nullptr
     );
@@ -1945,7 +1945,7 @@ inline bool show_sajdah_navigator_dialog(
     if (!places.empty()) SendMessageW(st.list_hwnd, LB_SETCURSEL, 0, 0);
 
     HWND btn_go = CreateWindowExW(
-        0, L"BUTTON", is_en ? L"Go to Ayah (Enter)" : L"الانتقال للآية (Enter)",
+        0, L"BUTTON", is_en ? L"Go to Ayah (Enter)" : L"الانتقال إلى الآية (Enter)",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON,
         360, 396, 190, 34, dlg, (HMENU)IDOK, hInst, nullptr
     );
@@ -1981,7 +1981,7 @@ inline bool show_sajdah_navigator_dialog(
 // ============================================================================
 // نافذة «النسخ المتعدد» (Ctrl+Alt+C): آيات الوحدة الحالية في قائمة بمربعات اختيار.
 // المسافة تحدد الآية أو تلغيها، و Enter ينسخ المحدد بترتيب المصحف.
-// التحديد هنا هو نفسه تظليل الآيات في المصحف، فما ظلّله المبصر بالفأرة يظهر محدداً.
+// التحديد هنا هو نفسه تظليل الآيات في المصحف، فما ظلّله المبصر بالفأرة يظهر محددًا.
 // ============================================================================
 struct MultiCopyState {
     QuranDatabase* db = nullptr;
@@ -2020,15 +2020,15 @@ inline void multi_copy_check_all(MultiCopyState* st, bool on) {
     for (int i = 0; i < (int)st->ayahs.size(); ++i) ListView_SetCheckState(st->list, i, on ? TRUE : FALSE);
     multi_copy_update_count(st);
     if (st->sr) {
-        st->sr->speak(on ? (st->is_en ? L"All ayahs selected" : L"تم تحديد كل الآيات")
-                         : (st->is_en ? L"Selection cleared" : L"تم إلغاء تحديد كل الآيات"), true, st->settings->sapi_fallback);
+        st->sr->speak(on ? (st->is_en ? L"All ayahs selected" : L"حُدِّدت الآيات كلها")
+                         : (st->is_en ? L"Selection cleared" : L"أُلغي تحديد الآيات كلها"), true, st->settings->sapi_fallback);
     }
 }
 
 inline void multi_copy_do_copy(HWND dlg, MultiCopyState* st) {
     std::wstring all;
     int n = 0;
-    for (int i = 0; i < (int)st->ayahs.size(); ++i) {   // القائمة مرتبة أصلاً بترتيب المصحف
+    for (int i = 0; i < (int)st->ayahs.size(); ++i) {   // القائمة مرتبة أصلًا بترتيب المصحف
         if (!ListView_GetCheckState(st->list, i)) continue;
         if (n++ > 0) all += L"\r\n";
         all += format_ayah_custom(st->ayahs[i], st->settings->copy_script, st->settings->copy_brackets,
@@ -2036,15 +2036,14 @@ inline void multi_copy_do_copy(HWND dlg, MultiCopyState* st) {
     }
     if (n == 0) {
         if (st->sr) st->sr->speak(st->is_en ? L"No ayah is selected. Press Space on an ayah to select it."
-                                            : L"لم تحدد أي آية. اضغط المسافة على الآية لتحديدها.", true, st->settings->sapi_fallback);
+                                            : L"لم تُحدِّد أي آية. اضغط المسافة على الآية لتحديدها.", true, st->settings->sapi_fallback);
         return;
     }
     set_clipboard_text(dlg, all);
     st->copied = true;
     if (st->sr) {
         std::wstring msg = st->is_en ? (L"Copied " + std::to_wstring(n) + (n == 1 ? L" ayah" : L" ayahs"))
-                       : (n == 1 ? L"تم نسخ آية واحدة" : n == 2 ? L"تم نسخ آيتين"
-                          : n <= 10 ? (L"تم نسخ " + std::to_wstring(n) + L" آيات") : (L"تم نسخ " + std::to_wstring(n) + L" آية"));
+                       : (L"نُسخت " + ayahs_ar(n));
         st->sr->speak(msg, true, st->settings->sapi_fallback);
     }
     close_modal(dlg);
@@ -2154,7 +2153,7 @@ inline bool show_multi_copy_dialog(
     int focus_idx = 0;
     for (int i = 0; i < (int)ayahs.size(); ++i) {
         const AyahInfo& a = ayahs[i];
-        // نص الآية أولاً ثم رقمها (واسم السورة إن تعددت السور في الوحدة)
+        // نص الآية أولًا ثم رقمها (واسم السورة إن تعددت السور في الوحدة)
         std::wstring where = multi_surah
             ? (is_en ? (a.surah_name + L" " + std::to_wstring(a.ayah_number)) : (L"سورة " + a.surah_name + L"، الآية " + to_arabic_digits(a.ayah_number)))
             : (is_en ? (L"ayah " + std::to_wstring(a.ayah_number)) : (L"الآية " + to_arabic_digits(a.ayah_number)));

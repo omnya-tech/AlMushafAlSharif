@@ -262,7 +262,7 @@ inline std::wstring build_ayah_accessible_name(
     std::wstring letters_txt;
     if (letter_count > 0) {
         letters_txt = en ? (std::to_wstring(letter_count) + L" letters")
-                         : (std::to_wstring(letter_count) + L" حرفاً");
+                         : letters_ar(letter_count);
     }
     std::wstring sep = en ? L", " : L"، ";
 

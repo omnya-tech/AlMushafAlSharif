@@ -67,6 +67,23 @@ inline std::wstring to_arabic_digits(int val) {
     return to_arabic_digits(std::to_wstring(val));
 }
 
+// العدد مع معدوده على قواعد العربية: «حرف واحد»، «حرفان»، «٥ أحرف»، «١٥ حرفًا»، «١٠٠ حرف»
+inline std::wstring count_ar(int n, const std::wstring& one, const std::wstring& two,
+                             const std::wstring& plural, const std::wstring& acc, const std::wstring& sing) {
+    if (n == 1) return one;
+    if (n == 2) return two;
+    const std::wstring num = to_arabic_digits(n);
+    const int r = n % 100;
+    if (r >= 3 && r <= 10) return num + L" " + plural;
+    if (r >= 11) return num + L" " + acc;
+    return num + L" " + sing;
+}
+inline std::wstring letters_ar(int n) { return count_ar(n, L"حرف واحد", L"حرفان", L"أحرف", L"حرفًا", L"حرف"); }
+inline std::wstring words_ar(int n)   { return count_ar(n, L"كلمة واحدة", L"كلمتان", L"كلمات", L"كلمةً", L"كلمة"); }
+inline std::wstring times_ar(int n)   { return count_ar(n, L"مرة واحدة", L"مرتان", L"مرات", L"مرةً", L"مرة"); }
+inline std::wstring ayahs_ar(int n)   { return count_ar(n, L"آية واحدة", L"آيتان", L"آيات", L"آيةً", L"آية"); }
+inline std::wstring rukus_ar(int n)   { return count_ar(n, L"ركوع واحد", L"ركوعان", L"ركوعات", L"ركوعًا", L"ركوع"); }
+
 inline std::wstring to_western_digits(const std::wstring& s) {
     std::wstring out = s;
     for (wchar_t& c : out) {

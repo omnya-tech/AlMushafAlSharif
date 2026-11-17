@@ -570,7 +570,7 @@ EditionCheck QuranDatabase::check_edition_text(const std::string& utf8_text) con
 
         int page = _wtoi(p_txt.c_str());
         int surah = f[1].empty() ? last_surah : surah_from_text(f[1]);
-        if (surah == 0) { c.errors.push_back(ln + L"لم أتعرف على السورة: " + (f[1].empty() ? L"(فارغة في أول سطر)" : f[1])); continue; }
+        if (surah == 0) { c.errors.push_back(ln + L"تعذّر التعرّف على السورة: " + (f[1].empty() ? L"(فارغة في أول سطر)" : f[1])); continue; }
         if (!a_num) { c.errors.push_back(ln + L"رقم الآية غير صحيح: " + f[2]); continue; }
         int ayah = _wtoi(a_txt.c_str());
         last_surah = surah;
@@ -585,7 +585,7 @@ EditionCheck QuranDatabase::check_edition_text(const std::string& utf8_text) con
             continue;
         }
         if (page != expected_page) {
-            c.errors.push_back(ln + L"الصفحة " + std::to_wstring(page) + L" جاءت بدلاً من الصفحة " +
+            c.errors.push_back(ln + L"الصفحة " + std::to_wstring(page) + L" جاءت بدلًا من الصفحة " +
                                std::to_wstring(expected_page) + L" (صفحة ناقصة أو مكررة؟).");
             expected_page = page;
         }
@@ -597,7 +597,7 @@ EditionCheck QuranDatabase::check_edition_text(const std::string& utf8_text) con
     }
 
     if (rows.empty()) {
-        if (c.errors.empty()) c.errors.push_back(L"لم أجد أي صفحة في الملف.");
+        if (c.errors.empty()) c.errors.push_back(L"لا توجد أي صفحة في الملف.");
         return c;
     }
     if (rows.front().second != 1) c.errors.push_back(L"الصفحة الأولى يجب أن تبدأ بأول الفاتحة (الفاتحة، الآية ١).");
