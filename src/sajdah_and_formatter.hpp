@@ -59,6 +59,55 @@ inline const SajdahPlace* find_sajdah_place(const std::wstring& verse_key) {
     return nullptr;
 }
 
+// مواضع «سكتة لطيفة» المكتوبة في حواشي مصحف المدينة
+struct SaktaPlace {
+    const wchar_t* verse_key;
+    const wchar_t* word;       // الكلمة التي عليها السكتة، بلا تشكيل
+    const wchar_t* where_ar;
+    const wchar_t* where_en;
+};
+
+inline const SaktaPlace* find_sakta_place(const std::wstring& verse_key) {
+    static const SaktaPlace places[] = {
+        {L"18:1",  L"عوجا",   L"على ألف عوجا",  L"on the alif of 'iwaja"},
+        {L"36:52", L"مرقدنا", L"على الألف",     L"on the alif"},
+        {L"69:28", L"ماليه",  L"على هاء ماليه", L"on the ha of maliyah"},
+        {L"75:27", L"من",     L"على النون",     L"on the nun"},
+        {L"83:14", L"بل",     L"على اللام",     L"on the lam"},
+    };
+    for (const auto& p : places) {
+        if (verse_key == p.verse_key) return &p;
+    }
+    return nullptr;
+}
+
+// حروف الكلمة وحدها، ليطابق الرسمُ العثماني الكلمةَ المجردة أيًّا كان خط العرض
+inline std::wstring bare_arabic_word(const std::wstring& word) {
+    std::wstring out;
+    for (wchar_t ch : word) {
+        if (ch == 0x0671 || ch == 0x0622 || ch == 0x0623 || ch == 0x0625) out.push_back(L'\u0627');
+        else if (ch == 0x0649) out.push_back(L'\u064A');
+        else if (ch == 0x0629) out.push_back(L'\u0647');
+        else if ((ch >= 0x0621 && ch <= 0x063A) || (ch >= 0x0641 && ch <= 0x064A)) out.push_back(ch);
+    }
+    return out;
+}
+
+inline bool line_has_arabic_word(const std::wstring& line, const std::wstring& word) {
+    size_t i = 0;
+    while (i <= line.size()) {
+        size_t j = line.find(L' ', i);
+        if (j == std::wstring::npos) j = line.size();
+        if (bare_arabic_word(line.substr(i, j - i)) == word) return true;
+        i = j + 1;
+    }
+    return false;
+}
+
+inline std::wstring sakta_spoken_label(const SaktaPlace& p, bool en = false) {
+    return en ? (std::wstring(L"slight pause ") + p.where_en) : (std::wstring(L"سكتة لطيفة ") + p.where_ar);
+}
+
 inline std::wstring sajdah_short_label(const std::wstring& verse_key, bool en = false) {
     if (verse_key == L"41:37") {
         return en ? L"prostration (Maliki school)" : L"موضع سجدة تلاوة عند المالكية";
@@ -244,7 +293,7 @@ inline std::wstring build_ayah_accessible_name(
     bool en = false,
     int letter_count = 0,
     bool speak_waqf = false,
-    bool speak_marks = true   // نطق علامات الأجزاء والأحزاب والأرباع والسجدات مع الآية
+    bool speak_marks = true   // نطق علامات الأجزاء والأحزاب والأرباع والسجدات والسكتات مع الآية
 ) {
     std::wstring spoken = prepare_ayah_for_screen_reader(ayah, phonetic_norm, spell_muqattaat, speak_waqf);
     std::wstring tail;
@@ -260,6 +309,11 @@ inline std::wstring build_ayah_accessible_name(
 
     std::wstring sajdah = speak_marks ? sajdah_short_label(ayah.verse_key, en) : L"";
     std::wstring div = (speak_marks && is_rub_start) ? division_spoken_text(ayah, en) : L"";
+    // إذا كانت علامات الوقف تُنطق فالسكتة مذكورة في موضعها من الآية
+    std::wstring sakta;
+    if (speak_marks && !speak_waqf) {
+        if (const SaktaPlace* sp = find_sakta_place(ayah.verse_key)) sakta = sakta_spoken_label(*sp, en);
+    }
     std::wstring letters_txt;
     if (letter_count > 0) {
         letters_txt = en ? (std::to_wstring(letter_count) + L" letters")
@@ -267,7 +321,7 @@ inline std::wstring build_ayah_accessible_name(
     }
     std::wstring sep = en ? L", " : L"، ";
 
-    for (const auto& extra : {letters_txt, sajdah, div, bookmark_spoken}) {
+    for (const auto& extra : {letters_txt, sajdah, sakta, div, bookmark_spoken}) {
         if (!extra.empty()) {
             tail = tail.empty() ? extra : (tail + sep + extra);
         }

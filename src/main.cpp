@@ -164,8 +164,10 @@ struct AyahListItemData {
 // إجراء قائمة الآيات الأصلي (قبل الاستبدال) — يُستخدم لإكمال حركة الأسهم فوق الصفوف التكميلية
 static WNDPROC g_orig_ayah_list_proc = nullptr;
 
-static void draw_margin_mark(HDC hdc, const RECT& row, int top, int margin, bool on_logical_left,
-                             const std::vector<std::wstring>& lines, const ThemePalette& pal, HFONT font);
+static int margin_mark_height(HDC hdc, int width, const std::vector<std::wstring>& lines, HFONT font,
+                              std::vector<int>* heights = nullptr);
+static void draw_margin_mark(HDC hdc, const RECT& box, const std::vector<std::wstring>& lines,
+                             const ThemePalette& pal, HFONT font);
 
 // ------------------------------------------------------------------
 // أسماء اختصارات البرنامج تتبع لغته. الاختصارات في مجلدات كل المستخدمين، فتغييرها يحتاج إذن المسؤول:
@@ -1113,6 +1115,11 @@ public:
                 text += L"  [" + (is_kfgqpc ? to_western_digits(lbl) : lbl) + L"]";
             }
         }
+        if (marks_inline()) {
+            if (const SaktaPlace* sk = find_sakta_place(a.verse_key)) {
+                text += L"  [" + sakta_spoken_label(*sk, is_en()) + L"]";
+            }
+        }
         if (is_rub && marks_inline()) {
             std::wstring badge = division_badge_text(a, is_en());
             if (is_kfgqpc && !is_en()) badge = ordinals_for_quran_font(badge);
@@ -1178,7 +1185,9 @@ public:
         InvalidateRect(hwnd, &mark_col_right, TRUE);
     }
 
-    // علامات الآيات الظاهرة الآن في عمودي الهامش خارج الإطار، كل علامة بمحاذاة أول سطر من آيتها
+    // علامات الآيات الظاهرة في عمودي الهامش خارج الإطار، كل نوع في موضعه من حواشي مصحف المدينة:
+    // الحزب والجزء والسكتة وسطها على سطرها، والربع وأخواه والسجدة أسفلها عند سطرها،
+    // والسجدة التي يليها ربع أو حزب ختم واحد وسطه بين الآيتين
     void paint_outside_marks(HDC hdc) const {
         if (!marks_outside || !list_ayahs || showing_units || !IsWindowVisible(list_ayahs)) return;
         DWORD old_layout = SetLayout(hdc, 0);
@@ -1198,30 +1207,124 @@ public:
         RECT lr;
         GetClientRect(list_ayahs, &lr);
         const int list_top = mark_col_left.top;
+        const int view_bottom = list_top + lr.bottom;
         const int saved = SaveDC(hdc);
-        IntersectClipRect(hdc, 0, list_top, client.right, list_top + lr.bottom);
-        ThemePalette pal = get_theme_palette(effective_theme());
-        const int edge = DS(kAccentWidth) + DS(4);
+        IntersectClipRect(hdc, 0, list_top, client.right, view_bottom);
+
+        struct Card {
+            bool right = false;
+            int anchor = 0;
+            bool anchor_is_bottom = false;
+            std::vector<std::wstring> lines;
+            int top = 0, height = 0;
+        };
+        std::vector<Card> cards;
+        auto add_card = [&](const AyahInfo& ayah, int anchor, bool anchor_is_bottom, std::vector<std::wstring> lines) {
+            Card c;
+            // الصفحة الفردية على اليمين المرئي، والزوجية على اليسار، كالمصحف المفتوح
+            c.right = (ayah.page_number % 2) == 1;
+            c.anchor = anchor;
+            c.anchor_is_bottom = anchor_is_bottom;
+            c.lines = std::move(lines);
+            cards.push_back(std::move(c));
+        };
+
         const int count = (int)ayah_items.size();
+        int merged_id = 0;   // آية بدأ ربعها في ختم السجدة التي قبلها
         for (int i = (int)SendMessageW(list_ayahs, LB_GETTOPINDEX, 0, 0); i >= 0 && i < count; ++i) {
             RECT ir{};
             if (SendMessageW(list_ayahs, LB_GETITEMRECT, i, (LPARAM)&ir) == LB_ERR || ir.top >= lr.bottom) break;
             const auto& it = ayah_items[i];
-            if (it.kind != ListItemKind::Ayah || it.seg_index != 0 || it.mushaf_line) continue;
-            auto lines = margin_mark_lines(it.ayah);
-            if (lines.empty()) continue;
-            // الصفحة الفردية على اليمين المرئي، والزوجية على اليسار، كالمصحف المفتوح
-            const RECT col = ((it.ayah.page_number % 2) == 1) ? vright : vleft;
-            // الختم قد يطول عن صف قصير، فحدّه أسفل القائمة لا أسفل الصف
-            RECT row = {col.left - edge, list_top + ir.top, col.right, list_top + lr.bottom};
-            draw_margin_mark(hdc, row, row.top + DS(kRowPadY), (col.right - col.left) + edge + DS(6), true, lines, pal, font_margin);
+            if (it.kind != ListItemKind::Ayah || it.mushaf_line || it.lines.empty() || it.line_h <= 0) continue;
+            const AyahInfo& ayah = it.ayah;
+            const int lh = it.line_h;
+            const int n = (int)it.lines.size();
+            const int y0 = list_top + ir.top + (it.seg_index == 0 ? DS(kRowPadY) : 0);
+            // العلامة تظهر ما دام سطرها ظاهرًا
+            auto line_visible = [&](int k) {
+                const int mid = y0 + k * lh + lh / 2;
+                return mid >= list_top && mid < view_bottom;
+            };
+
+            if (it.seg_index == 0 && line_visible(0)) {
+                auto division = margin_division_lines(ayah);
+                auto personal = margin_personal_lines(ayah);
+                if (ayah.id == merged_id) division.clear();
+                if (!division.empty()) {
+                    const bool quarter = (ayah.rub_el_hizb_number - 1) % 4 != 0;
+                    division.insert(division.end(), personal.begin(), personal.end());
+                    add_card(ayah, quarter ? y0 + lh : y0 + lh / 2, quarter, std::move(division));
+                } else if (!personal.empty()) {
+                    add_card(ayah, y0 + lh / 2, false, std::move(personal));
+                }
+            }
+
+            if (const SaktaPlace* sk = find_sakta_place(ayah.verse_key)) {
+                for (int k = 0; k < n; ++k) {
+                    if (line_visible(k) && line_has_arabic_word(it.lines[k], sk->word)) {
+                        add_card(ayah, y0 + k * lh + lh / 2, false,
+                                 {tr(L"سكتة لطيفة", L"Slight pause"), is_en() ? sk->where_en : sk->where_ar});
+                        break;
+                    }
+                }
+            }
+
+            if (it.seg_index + 1 == it.seg_count && line_visible(n - 1)) {
+                auto sajdah = margin_sajdah_lines(ayah);
+                if (!sajdah.empty()) {
+                    std::vector<std::wstring> next_division;
+                    if (i + 1 < count && ayah_items[i + 1].kind == ListItemKind::Ayah && !ayah_items[i + 1].mushaf_line &&
+                        ayah_items[i + 1].ayah.id == ayah.id + 1 && ayah_items[i + 1].ayah.page_number == ayah.page_number) {
+                        next_division = margin_division_lines(ayah_items[i + 1].ayah);
+                    }
+                    if (!next_division.empty()) {
+                        merged_id = ayah.id + 1;
+                        sajdah.insert(sajdah.end(), next_division.begin(), next_division.end());
+                        add_card(ayah, list_top + ir.bottom, false, std::move(sajdah));
+                    } else {
+                        add_card(ayah, y0 + n * lh, true, std::move(sajdah));
+                    }
+                }
+            }
+        }
+
+        ThemePalette pal = get_theme_palette(effective_theme());
+        const int inset = DS(4), gap = DS(6);
+        for (int side = 0; side < 2; ++side) {
+            const RECT& col = side ? vright : vleft;
+            const int width = col.right - col.left;
+            if (width < DS(30)) continue;
+            std::vector<Card*> column;
+            for (auto& c : cards) {
+                if (c.right != (side == 1)) continue;
+                c.height = margin_mark_height(hdc, width, c.lines, font_margin);
+                c.top = c.anchor_is_bottom ? c.anchor - c.height : c.anchor - c.height / 2;
+                column.push_back(&c);
+            }
+            std::stable_sort(column.begin(), column.end(), [](const Card* x, const Card* y) { return x->top < y->top; });
+            // لا يغطي ختم ختمًا، ويبقى كل ختم كاملًا داخل حدود الصفحة
+            int floor_y = list_top + inset;
+            for (Card* c : column) {
+                c->top = std::max(c->top, floor_y);
+                floor_y = c->top + c->height + gap;
+            }
+            int ceil_y = view_bottom - inset;
+            for (auto p = column.rbegin(); p != column.rend(); ++p) {
+                (*p)->top = std::min((*p)->top, ceil_y - (*p)->height);
+                ceil_y = (*p)->top - gap;
+            }
+            for (Card* c : column) {
+                const RECT box = {col.left, std::max(c->top, list_top + inset), col.right,
+                                  std::max(c->top, list_top + inset) + c->height};
+                draw_margin_mark(hdc, box, c->lines, pal, font_margin);
+            }
         }
         RestoreDC(hdc, saved);
         SetLayout(hdc, old_layout);
     }
 
-    // ما يُكتب في الهامش بجوار الآية: علامة التقسيم (الجزء والحزب وأرباعه) والسجدة، سطرًا سطرًا
-    std::vector<std::wstring> margin_mark_lines(const AyahInfo& a) const {
+    // علامة التقسيم في الهامش: الجزء والحزب وأرباعه، سطرًا سطرًا
+    std::vector<std::wstring> margin_division_lines(const AyahInfo& a) const {
         std::vector<std::wstring> out;
         const bool en = is_en();
         auto num = [&](int v) { return en ? std::to_wstring(v) : to_arabic_digits(v); };
@@ -1239,6 +1342,13 @@ public:
                 out.push_back(hizb);
             }
         }
+        return out;
+    }
+
+    // علامة السجدة في الهامش
+    std::vector<std::wstring> margin_sajdah_lines(const AyahInfo& a) const {
+        std::vector<std::wstring> out;
+        const bool en = is_en();
         if (const SajdahPlace* sp = find_sajdah_place(a.verse_key)) {
             out.push_back(tr(L"۩ سجدة", L"۩ Sajdah"));
             if (a.verse_key == L"41:37") out.push_back(tr(L"عند المالكية", L"Maliki"));
@@ -1254,6 +1364,12 @@ public:
             out.push_back(tr(L"۩ سجدة", L"۩ Sajdah"));
             out.push_back(tr(L"عند المالكية", L"Maliki"));
         }
+        return out;
+    }
+
+    // ما يخص القارئ: فاصل الختمة والمفضلة
+    std::vector<std::wstring> margin_personal_lines(const AyahInfo& a) const {
+        std::vector<std::wstring> out;
         if (!settings.khatmah_verse_key.empty() && a.verse_key == settings.khatmah_verse_key) {
             out.push_back(tr(L"فاصل الختمة", L"Reading mark"));
         } else if (std::find(settings.bookmarks.begin(), settings.bookmarks.end(), a.verse_key) != settings.bookmarks.end()) {
@@ -2938,29 +3054,29 @@ static RECT inline_copy_button_rect(const RECT& item_rc, bool rtl_layout) {
     return r;
 }
 
-// ختم صغير مذهّب في هامش الصفحة، كعلامات الأحزاب والأجزاء على حواشي المصحف الورقي.
-// on_logical_left: في الطرف المنطقي الأيسر من الصف (وهو اليمين المرئي في الواجهة العربية المعكوسة)
-static void draw_margin_mark(HDC hdc, const RECT& row, int top, int margin, bool on_logical_left,
-                             const std::vector<std::wstring>& lines, const ThemePalette& pal, HFONT font) {
-    const int edge = DS(kAccentWidth) + DS(4);
-    RECT box;
-    box.left = on_logical_left ? row.left + edge : row.right - margin + DS(6);
-    box.right = on_logical_left ? row.left + margin - DS(6) : row.right - edge;
-    if (box.right - box.left < DS(30)) return;
-
+// ارتفاع الختم بعرض عمود الهامش، وارتفاع كل سطر فيه
+static int margin_mark_height(HDC hdc, int width, const std::vector<std::wstring>& lines, HFONT font,
+                              std::vector<int>* heights) {
     HGDIOBJ old_f = SelectObject(hdc, font);
-    const int text_w = (box.right - box.left) - DS(8);
+    const int text_w = width - DS(8);
     int text_h = 0;
-    std::vector<int> heights;
     for (const auto& ln : lines) {
         RECT c = {0, 0, text_w, 0};
         DrawTextW(hdc, ln.c_str(), (int)ln.size(), &c, DT_CALCRECT | DT_WORDBREAK | DT_CENTER | DT_NOPREFIX | dt_reading_flag(hdc, true));
-        heights.push_back(c.bottom - c.top);
+        if (heights) heights->push_back(c.bottom - c.top);
         text_h += c.bottom - c.top;
     }
+    SelectObject(hdc, old_f);
+    return text_h + 2 * DS(5);
+}
+
+// ختم صغير مذهّب في هامش الصفحة، كعلامات الأحزاب والأجزاء على حواشي المصحف الورقي
+static void draw_margin_mark(HDC hdc, const RECT& box, const std::vector<std::wstring>& lines,
+                             const ThemePalette& pal, HFONT font) {
+    std::vector<int> heights;
+    margin_mark_height(hdc, box.right - box.left, lines, font, &heights);
+    HGDIOBJ old_f = SelectObject(hdc, font);
     const int pad = DS(5);
-    box.top = std::max((int)row.top + DS(2), top - DS(2));
-    box.bottom = std::min((int)row.bottom - DS(2), (int)box.top + text_h + 2 * pad);
 
     // إطار مذهّب مزدوج بزوايا مستديرة، وزخرفة صغيرة أعلاه وأسفله
     HBRUSH fill = CreateSolidBrush(pal.paper_bg);
@@ -2989,7 +3105,6 @@ static void draw_margin_mark(HDC hdc, const RECT& row, int top, int margin, bool
     int y = box.top + pad;
     for (size_t i = 0; i < lines.size(); ++i) {
         RECT lr = {box.left + DS(4), y, box.right - DS(4), y + heights[i]};
-        if (lr.bottom > box.bottom) break;
         DrawTextW(hdc, lines[i].c_str(), (int)lines[i].size(), &lr, DT_WORDBREAK | DT_CENTER | DT_NOPREFIX | dt_reading_flag(hdc, true));
         y += heights[i];
     }
@@ -4770,6 +4885,31 @@ static int run_self_test() {
             rows.resize(4);   // آية أخيرة من صف واحد
             SELFTEST_CHECK(MushafAppWindow::next_item_start_row(rows, 3) == -1);
             SELFTEST_CHECK(MushafAppWindow::next_item_start_row(rows, 1) == 3);
+        }
+
+        // السكتات الخمس: كلمة كل سكتة في سطر واحد بعينه من الآية، بالرسمين وبعرضين مختلفين
+        {
+            const int places[][2] = {{18, 1}, {36, 52}, {69, 28}, {75, 27}, {83, 14}};
+            for (const auto& pl : places) {
+                AyahInfo sa;
+                SELFTEST_CHECK(app.db->get_ayah(pl[0], pl[1], sa));
+                const SaktaPlace* sk = find_sakta_place(sa.verse_key);
+                SELFTEST_CHECK(sk != nullptr);
+                if (!sk) continue;
+                for (const std::wstring* txt : {&sa.text_qpc_hafs, &sa.text_uthmani}) {
+                    for (int w : {700, 260}) {
+                        int hits = 0;
+                        for (const auto& ln : MushafAppWindow::wrap_text_lines(hdc, *txt, w)) {
+                            if (line_has_arabic_word(ln, sk->word)) ++hits;
+                        }
+                        SELFTEST_CHECK(hits == 1);
+                    }
+                }
+                const std::wstring label = sakta_spoken_label(*sk);
+                SELFTEST_CHECK(build_ayah_accessible_name(sa, false, false, L"text", false, L"", false, 0, false, true).find(label) != std::wstring::npos);
+                SELFTEST_CHECK(build_ayah_accessible_name(sa, false, false, L"text", false, L"", false, 0, false, false).find(label) == std::wstring::npos);
+            }
+            SELFTEST_CHECK(find_sakta_place(L"2:245") == nullptr);
         }
         SelectObject(hdc, old);
         DeleteObject(f);
