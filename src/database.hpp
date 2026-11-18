@@ -112,6 +112,8 @@ struct SurahHeadingInfo {
     std::wstring type;
     std::wstring excepted_verses;
     std::wstring place_note;
+    std::wstring excepted_verses_en;   // الآيات المستثناة بفواصل إنجليزية
+    std::wstring place_note_en;        // ملاحظة النزول بالإنجليزية
     int after_surah = 0;
 };
 

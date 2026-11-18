@@ -275,6 +275,7 @@ struct AppSettings {
     bool sr_phonetic_norm = true;
     bool sr_spell_muqattaat = false;
     bool sr_speak_waqf = false;        // نطق علامات الوقف بأسمائها (صلى، قلى، ج...) لقارئ الشاشة
+    bool sr_speak_marks = true;        // نطق علامات الأجزاء والأحزاب والأرباع والسجدات مع الآية
     bool sapi_fallback = false;
     int last_surah = 1;
     int last_page = 1;
@@ -396,6 +397,7 @@ struct AppSettings {
         get_bool("sr_phonetic_norm", sr_phonetic_norm);
         get_bool("sr_spell_muqattaat", sr_spell_muqattaat);
         get_bool("sr_speak_waqf", sr_speak_waqf);
+        get_bool("sr_speak_marks", sr_speak_marks);
         get_bool("sapi_fallback", sapi_fallback);
         get_int("last_surah", last_surah);
         get_int("last_page", last_page);
@@ -498,6 +500,7 @@ struct AppSettings {
         oss << "  \"sr_phonetic_norm\": " << (sr_phonetic_norm ? "true" : "false") << ",\n";
         oss << "  \"sr_spell_muqattaat\": " << (sr_spell_muqattaat ? "true" : "false") << ",\n";
         oss << "  \"sr_speak_waqf\": " << (sr_speak_waqf ? "true" : "false") << ",\n";
+        oss << "  \"sr_speak_marks\": " << (sr_speak_marks ? "true" : "false") << ",\n";
         oss << "  \"sapi_fallback\": " << (sapi_fallback ? "true" : "false") << ",\n";
         oss << "  \"last_surah\": " << last_surah << ",\n";
         oss << "  \"last_page\": " << last_page << ",\n";

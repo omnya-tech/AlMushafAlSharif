@@ -79,6 +79,19 @@ Source: "legal\LICENSE-en.txt"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{autoprograms}\{cm:AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\assets\icon.ico"; Comment: "{cm:AppComment}"
 Name: "{autodesktop}\{cm:AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\assets\icon.ico"; Tasks: desktopicon
 
+[InstallDelete]
+; قد يكون اسم الاختصار قد تغيّر مع لغة البرنامج، فلا يبقى اختصاران بعد التحديث
+Type: files; Name: "{autoprograms}\{#AppNameAr}.lnk"
+Type: files; Name: "{autoprograms}\{#AppNameEn}.lnk"
+Type: files; Name: "{autodesktop}\{#AppNameAr}.lnk"
+Type: files; Name: "{autodesktop}\{#AppNameEn}.lnk"
+
+[UninstallDelete]
+Type: files; Name: "{autoprograms}\{#AppNameAr}.lnk"
+Type: files; Name: "{autoprograms}\{#AppNameEn}.lnk"
+Type: files; Name: "{autodesktop}\{#AppNameAr}.lnk"
+Type: files; Name: "{autodesktop}\{#AppNameEn}.lnk"
+
 [Registry]
 Root: HKCU; Subkey: "Software\AlMushafAlSharif"; ValueType: string; ValueName: "InstallerLanguage"; ValueData: "{language}"; Flags: uninsdeletekey
 

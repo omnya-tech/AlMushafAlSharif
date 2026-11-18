@@ -243,7 +243,8 @@ inline std::wstring build_ayah_accessible_name(
     const std::wstring& bookmark_spoken,
     bool en = false,
     int letter_count = 0,
-    bool speak_waqf = false
+    bool speak_waqf = false,
+    bool speak_marks = true   // نطق علامات الأجزاء والأحزاب والأرباع والسجدات مع الآية
 ) {
     std::wstring spoken = prepare_ayah_for_screen_reader(ayah, phonetic_norm, spell_muqattaat, speak_waqf);
     std::wstring tail;
@@ -257,8 +258,8 @@ inline std::wstring build_ayah_accessible_name(
                   : (L"الآية " + std::to_wstring(ayah.ayah_number) + L" من سورة " + ayah.surah_name);
     }
 
-    std::wstring sajdah = sajdah_short_label(ayah.verse_key, en);
-    std::wstring div = is_rub_start ? division_spoken_text(ayah, en) : L"";
+    std::wstring sajdah = speak_marks ? sajdah_short_label(ayah.verse_key, en) : L"";
+    std::wstring div = (speak_marks && is_rub_start) ? division_spoken_text(ayah, en) : L"";
     std::wstring letters_txt;
     if (letter_count > 0) {
         letters_txt = en ? (std::to_wstring(letter_count) + L" letters")
@@ -363,8 +364,10 @@ inline std::wstring build_surah_heading(const QuranDatabase& db, int surah_numbe
         std::wstring place = (h.type == L"مكية") ? L"Meccan" : L"Medinan";
         std::wstring res = place;
         if (!h.excepted_verses.empty()) {
-            res += L", except ayah " + to_western_digits(h.excepted_verses);
+            const bool multi = h.excepted_verses_en.find_first_of(L",-") != std::wstring::npos;
+            res += (multi ? L", except ayahs " : L", except ayah ") + h.excepted_verses_en;
         }
+        if (!h.place_note_en.empty()) res += L" (" + h.place_note_en + L")";
         res += L" • " + std::to_wstring(s.verses_count) + L" verses";
         if (h.after_surah > 0) {
             SurahInfo prev = db.get_surah(h.after_surah);

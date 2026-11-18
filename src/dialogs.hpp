@@ -419,6 +419,7 @@ struct OptionsDlgState {
     HWND chk_sr_muqattaat = nullptr;
     HWND chk_sapi = nullptr;
     HWND chk_sr_waqf = nullptr;
+    HWND chk_sr_marks = nullptr;
 
     // Tab 3: تخصيص الاختصارات
     std::map<std::wstring, std::wstring> pending_shortcuts;
@@ -667,6 +668,7 @@ static LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             st->settings->sr_spell_muqattaat = (SendMessageW(st->chk_sr_muqattaat, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->sapi_fallback = (SendMessageW(st->chk_sapi, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->sr_speak_waqf = (SendMessageW(st->chk_sr_waqf, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            st->settings->sr_speak_marks = (SendMessageW(st->chk_sr_marks, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->show_ayah_letter_count = (SendMessageW(st->chk_letter_count, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->custom_shortcuts = st->pending_shortcuts;
 
@@ -752,7 +754,7 @@ inline bool show_options_dialog(
 
     // ---------------- Tab 0: النسخ والتصفح ----------------
 
-    add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Default browse by:" : L"طريقة التصفح:", WS_CHILD | WS_VISIBLE, 32, 60, 210, 26, dlg, nullptr, hInst, nullptr));
+    add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Browse by:" : L"طريقة التصفح:", WS_CHILD | WS_VISIBLE, 32, 60, 210, 26, dlg, nullptr, hInst, nullptr));
     st.combo_browse = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, 250, 56, 430, 240, dlg, (HMENU)602, hInst, nullptr));
     // عدد الصفحات بحسب الطبعة المختارة (المدينة ٦٠٤، ودار المعارف ٤٨٥)
     int pr = page_count % 100;
@@ -780,10 +782,10 @@ inline bool show_options_dialog(
     st.chk_show_sidebar = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Show the side index in the main window (F9)" : L"إظهار قائمة الفهرس الجانبي في الواجهة الرئيسية (F9)", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 164, 640, 26, dlg, (HMENU)605, hInst, nullptr));
     SendMessageW(st.chk_show_sidebar, BM_SETCHECK, settings.show_sidebar ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Open program on:" : L"يفتح البرنامج على:", WS_CHILD | WS_VISIBLE, 32, 200, 210, 26, dlg, nullptr, hInst, nullptr));
+    add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Open the program on:" : L"يفتح البرنامج على:", WS_CHILD | WS_VISIBLE, 32, 200, 210, 26, dlg, nullptr, hInst, nullptr));
     st.combo_startup_focus = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, 250, 196, 430, 200, dlg, (HMENU)606, hInst, nullptr));
     const wchar_t* sf_ar[3] = {L"فهرس السور (القائمة الجانبية)", L"قائمة الآيات (موضع القراءة)", L"قائمة الفهرس الكامل (الوحدات)"};
-    const wchar_t* sf_en[3] = {L"Surah index (side panel)", L"Ayahs list (reading view)", L"Full units index view"};
+    const wchar_t* sf_en[3] = {L"Surah index (side panel)", L"Ayah list (reading view)", L"Full index"};
     const wchar_t* sf_keys[3] = {L"surah_index", L"ayahs", L"units"};
     int sf_sel = 0;
     for (int i = 0; i < 3; ++i) {
@@ -792,7 +794,7 @@ inline bool show_options_dialog(
     }
     SendMessageW(st.combo_startup_focus, CB_SETCURSEL, sf_sel, 0);
 
-    add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Copied script:" : L"نوع رسم الآية عند النسخ:", WS_CHILD | WS_VISIBLE, 32, 242, 210, 26, dlg, nullptr, hInst, nullptr));
+    add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Script for copying:" : L"نوع رسم الآية عند النسخ:", WS_CHILD | WS_VISIBLE, 32, 242, 210, 26, dlg, nullptr, hInst, nullptr));
     st.combo_copy_script = add_ctrl(st.tab0_ctrls, CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST, 250, 238, 430, 200, dlg, (HMENU)610, hInst, nullptr));
     // النص القرآني يُنسخ مشكولًا دائمًا
     const wchar_t* cs_ar[3] = {L"الرسم العثماني المشكول (مصحف المدينة)", L"رسم حفص (مجمع الملك فهد)", L"الرسم الإملائي المشكول"};
@@ -851,7 +853,7 @@ inline bool show_options_dialog(
     int dp_sel = (settings.ayah_display == L"text") ? 0 : (settings.ayah_display == L"text_number_surah" ? 2 : 1);
     SendMessageW(st.combo_display, CB_SETCURSEL, dp_sel, 0);
 
-    add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Colour theme:" : L"المظهر اللوني:", WS_CHILD, 32, 262, 210, 26, dlg, nullptr, hInst, nullptr));
+    add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Color theme:" : L"المظهر اللوني:", WS_CHILD, 32, 262, 210, 26, dlg, nullptr, hInst, nullptr));
     st.combo_theme = add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"COMBOBOX", L"", WS_CHILD | WS_TABSTOP | CBS_DROPDOWNLIST, 250, 258, 430, 200, dlg, (HMENU)624, hInst, nullptr));
     const wchar_t* th_ar[4] = {L"كريمي المدينة (الافتراضي المريح للعين)", L"أخضر زمردي ملكي", L"وضع ليلي ذهبي هادئ", L"تباين عالٍ (أسود وأصفر لضعاف البصر)"};
     const wchar_t* th_en[4] = {L"Madinah Cream (default)", L"Royal Emerald", L"Night Gold", L"High Contrast (yellow on black)"};
@@ -863,7 +865,7 @@ inline bool show_options_dialog(
     }
     SendMessageW(st.combo_theme, CB_SETCURSEL, th_sel, 0);
 
-    st.chk_letter_count = add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Show Arabic letter counter for each ayah (visual and screen reader)" : L"إظهار عدد حروف كل آية (على الشاشة ولقارئ الشاشة)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 306, 640, 28, dlg, (HMENU)625, hInst, nullptr));
+    st.chk_letter_count = add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Show the letter count of each ayah (on screen and for screen readers)" : L"إظهار عدد حروف كل آية (على الشاشة ولقارئ الشاشة)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 306, 640, 28, dlg, (HMENU)625, hInst, nullptr));
     SendMessageW(st.chk_letter_count, BM_SETCHECK, settings.show_ayah_letter_count ? BST_CHECKED : BST_UNCHECKED, 0);
 
     // ---------------- Tab 2: قارئات الشاشة ----------------
@@ -879,7 +881,10 @@ inline bool show_options_dialog(
     st.chk_sr_waqf = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Read the pause marks by their names as written in the Mushaf (such as صلى, قلى, ج)" : L"نطق علامات الوقف بأسمائها كما في المصحف (مثل: صلى، قلى، ج، لا)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 190, 640, 28, dlg, (HMENU)634, hInst, nullptr));
     SendMessageW(st.chk_sr_waqf, BM_SETCHECK, settings.sr_speak_waqf ? BST_CHECKED : BST_UNCHECKED, 0);
 
-    st.chk_sapi = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Use the built-in Windows voice when no screen reader is running" : L"استخدام صوت ويندوز المدمج إذا لم يكن قارئ شاشة يعمل", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 230, 640, 28, dlg, (HMENU)633, hInst, nullptr));
+    st.chk_sr_marks = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Read juz, hizb, quarter and sajdah marks with the ayah" : L"نطق علامات الأجزاء والأحزاب والأرباع والسجدات مع الآية", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 230, 640, 28, dlg, (HMENU)635, hInst, nullptr));
+    SendMessageW(st.chk_sr_marks, BM_SETCHECK, settings.sr_speak_marks ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    st.chk_sapi = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Use the built-in Windows voice when no screen reader is running" : L"استخدام صوت ويندوز المدمج إذا لم يكن قارئ شاشة يعمل", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 270, 640, 28, dlg, (HMENU)633, hInst, nullptr));
     SendMessageW(st.chk_sapi, BM_SETCHECK, settings.sapi_fallback ? BST_CHECKED : BST_UNCHECKED, 0);
 
     // ---------------- Tab 3: تخصيص الاختصارات ----------------
@@ -891,9 +896,9 @@ inline bool show_options_dialog(
     SetWindowLongPtrW(st.edit_shortcut_capture, GWLP_USERDATA, (LONG_PTR)&st);
     st.orig_capture_proc = reinterpret_cast<WNDPROC>(SetWindowLongPtrW(st.edit_shortcut_capture, GWLP_WNDPROC, (LONG_PTR)ShortcutCaptureProc));
 
-    st.btn_sc_reset_one = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Reset Selected" : L"استعادة اختصار الأمر الأصلي", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 462, 315, 220, 30, dlg, (HMENU)642, hInst, nullptr));
+    st.btn_sc_reset_one = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Reset This Shortcut" : L"استعادة اختصار الأمر الأصلي", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 462, 315, 220, 30, dlg, (HMENU)642, hInst, nullptr));
     st.btn_sc_reset_all = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Reset All Shortcuts" : L"استعادة الاختصارات الأصلية كلها", WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON, 462, 354, 220, 30, dlg, (HMENU)643, hInst, nullptr));
-    st.lbl_shortcut_status = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"Screen-reader safe validation is active." : L"التحقق التلقائي من توافق الاختصار مع قارئات الشاشة مفعّل.", WS_CHILD, 32, 358, 420, 48, dlg, nullptr, hInst, nullptr));
+    st.lbl_shortcut_status = add_ctrl(st.tab3_ctrls, CreateWindowExW(0, L"STATIC", is_en ? L"New shortcuts are checked for screen reader conflicts." : L"التحقق التلقائي من توافق الاختصار مع قارئات الشاشة مفعّل.", WS_CHILD, 32, 358, 420, 48, dlg, nullptr, hInst, nullptr));
     refresh_options_shortcuts_list(&st, 0);
 
     update_options_copy_preview(&st);
@@ -1566,7 +1571,7 @@ static void refresh_bookmarks_dialog_ui(BookmarksDlgState* st) {
     bool has_khatmah = (!st->settings->khatmah_verse_key.empty() && st->db->get_ayah_by_key(st->settings->khatmah_verse_key, ka));
     if (!has_khatmah) {
         SetWindowTextW(st->lbl_khatmah_info, st->is_en
-            ? L"No reading mark set yet. Press M or Ctrl+M while reading to mark the ayah where you stopped."
+            ? L"No reading mark is set yet. Press M or Ctrl+M while reading to mark the ayah where you stopped."
             : L"لم يُحدَّد فاصل الختمة بعد. اضغط M أو Ctrl+M أثناء القراءة لتضع علامة التوقف عند الآية التي وصلت إليها.");
         EnableWindow(st->btn_resume_khatmah, FALSE);
         EnableWindow(st->btn_remove_khatmah, FALSE);
@@ -1759,14 +1764,14 @@ inline SearchDlgResult show_bookmarks_dialog(
 
     // 1. قسم فاصل الختمة
     HWND grp_k = CreateWindowExW(
-        0, L"BUTTON", is_en ? L"Reading mark (Khatmah stop position)" : L"فاصل الختمة (موضع التوقف في القراءة)",
+        0, L"BUTTON", is_en ? L"Reading mark (where you stopped)" : L"فاصل الختمة (موضع التوقف في القراءة)",
         WS_CHILD | WS_VISIBLE | BS_GROUPBOX, 16, 12, 738, 134, dlg, nullptr, hInst, nullptr
     );
     st.lbl_khatmah_info = CreateWindowExW(
         0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 30, 38, 708, 48, dlg, nullptr, hInst, nullptr
     );
     st.btn_resume_khatmah = CreateWindowExW(
-        0, L"BUTTON", is_en ? L"Resume reading from stop mark (Alt+M)" : L"متابعة القراءة من موضع التوقف (Alt+M)",
+        0, L"BUTTON", is_en ? L"Resume from the reading mark (Alt+M)" : L"متابعة القراءة من موضع التوقف (Alt+M)",
         WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 30, 92, 270, 34, dlg, (HMENU)510, hInst, nullptr
     );
     HWND btn_set_khatmah = CreateWindowExW(
@@ -1977,6 +1982,158 @@ inline bool show_sajdah_navigator_dialog(
     return st.accepted;
 }
 
+
+// ============================================================================
+// نافذة نسخ مختارات نصية: عناصر بمربعات اختيار محددة كلها، يلغي القارئ ما لا يريده ثم ينسخ الباقي.
+// ============================================================================
+struct CheckCopyState {
+    AppSettings* settings = nullptr;
+    ScreenReaderEngine* sr = nullptr;
+    bool is_en = false;
+    HWND list = nullptr;
+    HWND lbl_count = nullptr;
+    std::vector<std::wstring> items;
+};
+
+inline int check_copy_count(CheckCopyState* st) {
+    int n = 0;
+    for (int i = 0; i < (int)st->items.size(); ++i) if (ListView_GetCheckState(st->list, i)) ++n;
+    return n;
+}
+
+inline void check_copy_update(CheckCopyState* st) {
+    if (!st->lbl_count) return;
+    const int n = check_copy_count(st);
+    std::wstring t = st->is_en ? (L"Selected: " + std::to_wstring(n) + L" of " + std::to_wstring(st->items.size()))
+                               : (L"المحدد: " + to_arabic_digits(n) + L" من " + to_arabic_digits((int)st->items.size()));
+    SetWindowTextW(st->lbl_count, t.c_str());
+}
+
+inline void check_copy_set_all(CheckCopyState* st, bool on) {
+    for (int i = 0; i < (int)st->items.size(); ++i) ListView_SetCheckState(st->list, i, on ? TRUE : FALSE);
+    check_copy_update(st);
+    if (st->sr) st->sr->speak(on ? (st->is_en ? L"All selected" : L"حُدِّدت البيانات كلها")
+                                 : (st->is_en ? L"Selection cleared" : L"أُلغي التحديد كله"), true, st->settings->sapi_fallback);
+}
+
+inline void check_copy_do(HWND dlg, CheckCopyState* st) {
+    std::wstring all;
+    int n = 0;
+    for (int i = 0; i < (int)st->items.size(); ++i) {
+        if (!ListView_GetCheckState(st->list, i)) continue;
+        if (n++ > 0) all += L"\r\n";
+        all += st->items[i];
+    }
+    if (n == 0) {
+        if (st->sr) st->sr->speak(st->is_en ? L"Nothing is selected." : L"لم تُحدِّد شيئًا.", true, st->settings->sapi_fallback);
+        return;
+    }
+    set_clipboard_text(dlg, all);
+    if (st->sr) st->sr->speak(st->is_en ? L"Copied the selected details" : L"نُسخت البيانات المحددة", true, st->settings->sapi_fallback);
+    close_modal(dlg);
+}
+
+static LRESULT CALLBACK CheckCopyWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    auto* st = reinterpret_cast<CheckCopyState*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+    switch (msg) {
+    case WM_NOTIFY: {
+        auto* nm = reinterpret_cast<NMHDR*>(lParam);
+        if (st && nm && nm->idFrom == 810 && nm->code == LVN_ITEMCHANGED &&
+            (reinterpret_cast<NMLISTVIEW*>(lParam)->uChanged & LVIF_STATE)) check_copy_update(st);
+        break;
+    }
+    case WM_COMMAND: {
+        if (!st) break;
+        UINT id = LOWORD(wParam);
+        if (id == IDOK || id == 811) { check_copy_do(hwnd, st); return 0; }
+        if (id == 812) { check_copy_set_all(st, true); return 0; }
+        if (id == 813) { check_copy_set_all(st, false); return 0; }
+        if (id == IDCANCEL) { close_modal(hwnd); return 0; }
+        break;
+    }
+    case WM_CLOSE:
+        close_modal(hwnd);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wParam, lParam);
+}
+
+inline void show_check_copy_dialog(HWND parent, AppSettings& settings, const std::wstring& title, const std::wstring& prompt,
+                                   const std::vector<std::wstring>& items, bool is_en, HFONT ui_font, ScreenReaderEngine* sr) {
+    static bool reg = false;
+    HINSTANCE hInst = GetModuleHandleW(nullptr);
+    if (!reg) {
+        WNDCLASSEXW wc{};
+        wc.cbSize = sizeof(wc);
+        wc.lpfnWndProc = CheckCopyWndProc;
+        wc.hInstance = hInst;
+        wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_BTNFACE + 1);
+        wc.lpszClassName = L"MushafCheckCopyDlg";
+        RegisterClassExW(&wc);
+        reg = true;
+    }
+    if (items.empty()) return;
+    CheckCopyState st;
+    st.settings = &settings;
+    st.sr = sr;
+    st.is_en = is_en;
+    st.items = items;
+
+    DWORD ex_style = WS_EX_DLGMODALFRAME | (is_en ? 0 : (WS_EX_LAYOUTRTL | WS_EX_RTLREADING));
+    HWND dlg = CreateWindowExW(ex_style, L"MushafCheckCopyDlg", title.c_str(), WS_POPUP | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+                               150, 80, 820, 600, parent, nullptr, hInst, nullptr);
+    SetWindowLongPtrW(dlg, GWLP_USERDATA, (LONG_PTR)&st);
+    HWND lbl = CreateWindowExW(0, L"STATIC", prompt.c_str(), WS_CHILD | WS_VISIBLE, 16, 14, 772, 24, dlg, nullptr, hInst, nullptr);
+    st.list = CreateWindowExW(WS_EX_CLIENTEDGE, WC_LISTVIEWW, L"",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | LVS_REPORT | LVS_NOCOLUMNHEADER | LVS_SINGLESEL | LVS_SHOWSELALWAYS,
+        16, 44, 772, 410, dlg, (HMENU)810, hInst, nullptr);
+    ListView_SetExtendedListViewStyle(st.list, LVS_EX_CHECKBOXES | LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER);
+    SendMessageW(st.list, WM_SETFONT, (WPARAM)ui_font, TRUE);
+    LVCOLUMNW col{};
+    col.mask = LVCF_WIDTH;
+    col.cx = 740;
+    ListView_InsertColumn(st.list, 0, &col);
+    for (int i = 0; i < (int)items.size(); ++i) {
+        LVITEMW it{};
+        it.mask = LVIF_TEXT;
+        it.iItem = i;
+        it.pszText = const_cast<wchar_t*>(items[i].c_str());
+        ListView_InsertItem(st.list, &it);
+        ListView_SetCheckState(st.list, i, TRUE);
+    }
+    ListView_SetColumnWidth(st.list, 0, LVSCW_AUTOSIZE);   // البيانات الطويلة تُقرأ كاملة بالتمرير الأفقي
+    ListView_SetItemState(st.list, 0, LVIS_FOCUSED | LVIS_SELECTED, LVIS_FOCUSED | LVIS_SELECTED);
+    st.lbl_count = CreateWindowExW(0, L"STATIC", L"", WS_CHILD | WS_VISIBLE, 16, 464, 772, 24, dlg, nullptr, hInst, nullptr);
+    check_copy_update(&st);
+    HWND btn_copy = CreateWindowExW(0, L"BUTTON", is_en ? L"Copy (Enter)" : L"نسخ (Enter)",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_DEFPUSHBUTTON, 16, 500, 170, 34, dlg, (HMENU)811, hInst, nullptr);
+    HWND btn_all = CreateWindowExW(0, L"BUTTON", is_en ? L"Select all (Ctrl+A)" : L"تحديد الكل (Ctrl+A)",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 196, 500, 190, 34, dlg, (HMENU)812, hInst, nullptr);
+    HWND btn_none = CreateWindowExW(0, L"BUTTON", is_en ? L"Clear selection" : L"إلغاء التحديد",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 396, 500, 170, 34, dlg, (HMENU)813, hInst, nullptr);
+    HWND btn_close = CreateWindowExW(0, L"BUTTON", is_en ? L"Close (Esc)" : L"إغلاق (Esc)",
+        WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON, 618, 500, 170, 34, dlg, (HMENU)IDCANCEL, hInst, nullptr);
+    for (HWND h : {lbl, st.lbl_count, btn_copy, btn_all, btn_none, btn_close}) SendMessageW(h, WM_SETFONT, (WPARAM)ui_font, TRUE);
+
+    fit_dialog_to_screen(dlg, parent);
+    EnableWindow(parent, FALSE);
+    SetFocus(st.list);
+    MSG msg;
+    while (IsWindow(dlg) && GetMessageW(&msg, nullptr, 0, 0)) {
+        if (msg.message == WM_KEYDOWN && msg.wParam == 'A' && (GetKeyState(VK_CONTROL) & 0x8000) && IsChild(dlg, msg.hwnd)) {
+            check_copy_set_all(&st, true);
+            continue;
+        }
+        if (handle_enter_on_focused_button(dlg, msg)) continue;
+        if (!IsDialogMessageW(dlg, &msg)) {
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+    }
+    EnableWindow(parent, TRUE);
+    SetForegroundWindow(parent);
+}
 
 // ============================================================================
 // نافذة «النسخ المتعدد» (Ctrl+Alt+C): آيات الوحدة الحالية في قائمة بمربعات اختيار.

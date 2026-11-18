@@ -161,6 +161,26 @@ static size_t find_matching_delim(const std::string& s, size_t open_pos, char op
     return std::string::npos;
 }
 
+// ترجمة عبارات النزول في بيانات السور (النص العربي هو المرجع)
+static std::wstring surah_note_en(const std::wstring& ar) {
+    if (ar == L"مكية") return L"Meccan";
+    if (ar == L"مدنية") return L"Medinan";
+    if (ar == L"فنزلت بمنى في حجة الوداع") return L"revealed at Mina during the Farewell Pilgrimage";
+    if (ar == L"فنزلت بعرفات في حجة الوداع") return L"revealed at Arafat during the Farewell Pilgrimage";
+    if (ar == L"فبين مكة والمدينة") return L"revealed between Makkah and Madinah";
+    if (ar == L"فبالجحفة أثناء الهجرة") return L"revealed at Al-Juhfah during the Hijrah";
+    if (ar == L"فنزلت في الطريق أثناء الهجرة") return L"revealed on the way during the Hijrah";
+    if (ar == L"وقد نزلت في الطريق عند الانصراف من الحديبية") return L"revealed on the way back from Al-Hudaybiyah";
+    if (ar == L"وهي آخر سورة نزلت بمكة") return L"the last surah revealed in Makkah";
+    if (ar == L"وقد نزلت بمنى في حجة الوداع") return L"revealed at Mina during the Farewell Pilgrimage";
+    return L"";
+}
+
+static std::wstring latin_commas(std::wstring s) {
+    for (wchar_t& ch : s) if (ch == L'\u060C') ch = L',';
+    return s;
+}
+
 static std::wstring format_verse_ranges(const std::vector<int>& verses) {
     if (verses.empty()) return L"";
     std::wstring out;
@@ -210,7 +230,7 @@ void QuranDatabase::load_headings(const std::wstring& path) {
         std::wstring top_note = to_wide(extract_json_string(block, "note"));
 
         std::vector<int> all_verses;
-        std::vector<std::wstring> exc_details;
+        std::vector<std::wstring> exc_details, exc_details_en;
 
         size_t ex_key = block.find("\"exceptions\"");
         if (ex_key != std::string::npos) {
@@ -258,10 +278,15 @@ void QuranDatabase::load_headings(const std::wstring& path) {
 
                     if (!detail.empty()) {
                         std::wstring vr = format_verse_ranges(everses);
+                        const std::wstring kind_en = surah_note_en(kind), place_en = surah_note_en(place);
+                        std::wstring detail_en = kind_en;
+                        if (!place_en.empty()) detail_en += (detail_en.empty() ? L"" : L" \u2014 ") + place_en;
                         if (!vr.empty()) {
                             exc_details.push_back(vr + L": " + detail);
+                            exc_details_en.push_back(latin_commas(vr) + L": " + detail_en);
                         } else {
                             exc_details.push_back(detail);
+                            exc_details_en.push_back(detail_en);
                         }
                     }
                 }
@@ -288,6 +313,18 @@ void QuranDatabase::load_headings(const std::wstring& path) {
         } else {
             h.place_note = top_note;
         }
+
+        h.excepted_verses_en = latin_commas(h.excepted_verses);
+        std::wstring exc_en;
+        if (exc_details_en.size() == 1) {
+            size_t colon = exc_details_en[0].find(L": ");
+            exc_en = (colon != std::wstring::npos) ? exc_details_en[0].substr(colon + 2) : exc_details_en[0];
+        } else {
+            for (size_t k = 0; k < exc_details_en.size(); ++k) exc_en += (k ? L"; " : L"") + exc_details_en[k];
+        }
+        const std::wstring top_en = surah_note_en(top_note);
+        h.place_note_en = exc_en;
+        if (!top_en.empty()) h.place_note_en += (h.place_note_en.empty() ? L"" : L", ") + top_en;
 
         headings_map_[s] = h;
     }

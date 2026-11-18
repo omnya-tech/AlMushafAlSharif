@@ -35,7 +35,8 @@ constexpr int kInlineBtnWidth = 72;
 // هامشا الصفحة يمينًا ويسارًا، كحواشي المصحف الورقي: فيهما علامات الأرباع والأحزاب والأجزاء والسجدات،
 // في الهامش الخارجي للصفحة (الأيمن للصفحة الفردية، والأيسر للزوجية). يُلغيان إن ضاقت القائمة عنهما
 constexpr int kPageMarginWidth = 76;
-constexpr int kPageMarginMinList = 560;
+constexpr int kPageMinWidth = 380;      // أقل عرض لصفحة المصحف بين عمودي العلامات
+constexpr int kMinWindowWidth = 740;    // أصغر عرض للنافذة: يتسع للصفحة وإطارها وعلامات الهامش والسهمين
 constexpr int kHeaderInsetX   = 28;
 constexpr int kHeaderInsetY   = 8;
 constexpr int kToolbarHeight  = 52;
@@ -163,6 +164,73 @@ static WNDPROC g_orig_ayah_list_proc = nullptr;
 
 static void draw_margin_mark(HDC hdc, const RECT& row, int top, int margin, bool on_logical_left,
                              const std::vector<std::wstring>& lines, const ThemePalette& pal, HFONT font);
+
+// ------------------------------------------------------------------
+// أسماء اختصارات البرنامج تتبع لغته. الاختصارات في مجلدات كل المستخدمين، فتغييرها يحتاج إذن المسؤول:
+// يشغّل البرنامج نسخة من نفسه بهذا الإذن لتغيير الأسماء فقط، ثم تنتهي.
+// ------------------------------------------------------------------
+static std::wstring special_folder(int csidl) {
+    wchar_t p[MAX_PATH] = {0};
+    return SUCCEEDED(SHGetFolderPathW(nullptr, csidl, nullptr, SHGFP_TYPE_CURRENT, p)) ? std::wstring(p) : std::wstring();
+}
+
+static bool file_exists(const std::wstring& p) { return GetFileAttributesW(p.c_str()) != INVALID_FILE_ATTRIBUTES; }
+
+// يعيد true إن وُجد اختصار باسم اللغة الأخرى؛ ومع apply يغيّر اسمه
+static bool rename_app_shortcuts(bool to_english, bool apply) {
+    const std::wstring from = to_english ? L"المصحف الشريف" : L"Al-Mushaf Al-Sharif";
+    const std::wstring to = to_english ? L"Al-Mushaf Al-Sharif" : L"المصحف الشريف";
+    bool found = false;
+    for (int csidl : {CSIDL_COMMON_PROGRAMS, CSIDL_COMMON_DESKTOPDIRECTORY}) {
+        const std::wstring dir = special_folder(csidl);
+        if (dir.empty()) continue;
+        const std::wstring a = dir + L"\\" + from + L".lnk", z = dir + L"\\" + to + L".lnk";
+        if (!file_exists(a)) continue;
+        found = true;
+        if (apply) MoveFileExW(a.c_str(), z.c_str(), MOVEFILE_REPLACE_EXISTING);
+    }
+    return found;
+}
+
+// تُنفَّذ في النسخة المرفوعة الصلاحية: الاختصارات واسم البرنامج في «إزالة البرامج»
+static int run_sync_shortcuts(bool to_english) {
+    rename_app_shortcuts(to_english, true);
+    HKEY hk = nullptr;
+    if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{AF7629F3-F29A-4FAD-ABF9-2A506A5375E6}_is1",
+                      0, KEY_SET_VALUE, &hk) == ERROR_SUCCESS) {
+        const std::wstring name = std::wstring(to_english ? L"Al-Mushaf Al-Sharif" : L"المصحف الشريف") + L" 1.0.0";
+        RegSetValueExW(hk, L"DisplayName", 0, REG_SZ, (const BYTE*)name.c_str(), (DWORD)((name.size() + 1) * sizeof(wchar_t)));
+        RegCloseKey(hk);
+    }
+    return 0;
+}
+
+static bool running_from_program_files() {
+    wchar_t exe[MAX_PATH] = {0};
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    for (int csidl : {CSIDL_PROGRAM_FILES, CSIDL_PROGRAM_FILESX86}) {
+        const std::wstring dir = special_folder(csidl);
+        if (!dir.empty() && _wcsnicmp(exe, dir.c_str(), dir.size()) == 0) return true;
+    }
+    return false;
+}
+
+static void sync_shortcuts_with_language(bool to_english) {
+    if (!running_from_program_files() || !rename_app_shortcuts(to_english, false)) return;
+    wchar_t exe[MAX_PATH] = {0};
+    GetModuleFileNameW(nullptr, exe, MAX_PATH);
+    SHELLEXECUTEINFOW sei{};
+    sei.cbSize = sizeof(sei);
+    sei.fMask = SEE_MASK_NOCLOSEPROCESS;
+    sei.lpVerb = L"runas";
+    sei.lpFile = exe;
+    sei.lpParameters = to_english ? L"--sync-shortcuts en" : L"--sync-shortcuts ar";
+    sei.nShow = SW_HIDE;
+    if (ShellExecuteExW(&sei) && sei.hProcess) {   // إن رفض المستخدم الإذن تبقى الأسماء وتتغير لغة البرنامج
+        WaitForSingleObject(sei.hProcess, 20000);
+        CloseHandle(sei.hProcess);
+    }
+}
 
 class MushafAppWindow {
 public:
@@ -489,6 +557,7 @@ public:
     void relaunch_for_language() {
         say(tr(L"يُعاد فتح البرنامج باللغة العربية", L"Reopening the program in English"));
         save_state();
+        sync_shortcuts_with_language(is_en());
         wchar_t exe[MAX_PATH] = {0};
         GetModuleFileNameW(nullptr, exe, MAX_PATH);
         STARTUPINFOW si{};
@@ -634,9 +703,9 @@ public:
         AppendMenuW(m_nav, MF_STRING, IDM_COPY_ALL,        lbl(L"نسخ كل الآيات المعروضة (الوحدة الحالية)", L"Copy all displayed ayahs (current unit)", IDM_COPY_ALL).c_str());
         AppendMenuW(m_nav, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m_nav, MF_STRING, IDM_FOCUS_AYAHS,     lbl(L"التركيز على قائمة الآيات", L"Focus the ayah list", IDM_FOCUS_AYAHS).c_str());
-        AppendMenuW(m_nav, MF_STRING, IDM_SHOW_UNITS,      lbl(L"فهرس السور / الصفحات / الأجزاء / الأرباع", L"Surah / page / juz / quarter list", IDM_SHOW_UNITS).c_str());
+        AppendMenuW(m_nav, MF_STRING, IDM_SHOW_UNITS,      lbl(L"فهرس السور / الصفحات / الأجزاء / الأرباع", L"Index list", IDM_SHOW_UNITS).c_str());
         AppendMenuW(m_nav, MF_STRING, IDM_FOCUS_INDEX,     lbl(L"التركيز على قائمة الفهرس الجانبي", L"Focus the side index", IDM_FOCUS_INDEX).c_str());
-        AppendMenuW(m_nav, MF_STRING, IDM_CYCLE_LANDMARKS, lbl(L"التنقل الدائري بين مناطق النافذة", L"Cycle between window areas", IDM_CYCLE_LANDMARKS).c_str());
+        AppendMenuW(m_nav, MF_STRING, IDM_CYCLE_LANDMARKS, lbl(L"التنقل الدائري بين مناطق النافذة", L"Move between window areas", IDM_CYCLE_LANDMARKS).c_str());
         AppendMenuW(m_nav, MF_SEPARATOR, 0, nullptr);
         AppendMenuW(m_nav, MF_STRING, IDM_NEXT_UNIT, tr(L"الوحدة التالية (سورة / صفحة / جزء / ربع)\tPageDown", L"Next (surah / page / juz / quarter)\tPageDown").c_str());
         AppendMenuW(m_nav, MF_STRING, IDM_PREV_UNIT, tr(L"الوحدة السابقة (سورة / صفحة / جزء / ربع)\tPageUp", L"Previous (surah / page / juz / quarter)\tPageUp").c_str());
@@ -666,7 +735,7 @@ public:
         AppendMenuW(m_opts, MF_STRING | (settings.mushaf_lines ? MF_CHECKED : 0) |
                     ((db && db->has_edition_lines()) ? 0 : MF_GRAYED), IDM_MUSHAF_LINES,
                     tr(L"سطور الطبعة كما في المصحف (عند التصفح بالصفحة)",
-                       L"Edition lines as in the printed Mushaf (when browsing by page)").c_str());
+                       L"Page lines as in the printed Mushaf (when browsing by page)").c_str());
 
         HMENU m_lang = CreatePopupMenu();
         AppendMenuW(m_lang, MF_STRING | (!is_en() ? MF_CHECKED : 0), IDM_LANG_AR, tr(L"العربية", L"Arabic").c_str());
@@ -678,9 +747,9 @@ public:
         AppendMenuW(m_opts, MF_STRING, IDM_FONT_DEC,       lbl(L"تصغير خط الآيات", L"Smaller Quran font", IDM_FONT_DEC).c_str());
         AppendMenuW(m_opts, MF_STRING, IDM_FONT_RESET,     lbl(L"الحجم الافتراضي لخط الآيات", L"Default Quran font size", IDM_FONT_RESET).c_str());
         AppendMenuW(m_opts, MF_STRING | (settings.show_sidebar ? MF_CHECKED : 0),
-                    IDM_TOGGLE_SIDEBAR, lbl(L"إظهار / إخفاء الفهرس الجانبي", L"Show / hide the index", IDM_TOGGLE_SIDEBAR).c_str());
+                    IDM_TOGGLE_SIDEBAR, lbl(L"إظهار / إخفاء الفهرس الجانبي", L"Show or hide the side index", IDM_TOGGLE_SIDEBAR).c_str());
         AppendMenuW(m_opts, MF_STRING | (focus_mode ? MF_CHECKED : 0),
-                    IDM_FOCUS_MODE, lbl(L"وضع التركيز: المصحف بملء الشاشة", L"Focus mode: full-screen Mushaf", IDM_FOCUS_MODE).c_str());
+                    IDM_FOCUS_MODE, lbl(L"وضع التركيز: المصحف بملء الشاشة", L"Full screen", IDM_FOCUS_MODE).c_str());
 
         HMENU m_disp = CreatePopupMenu();
         AppendMenuW(m_disp, MF_STRING | (settings.ayah_display == L"text" ? MF_CHECKED : 0),             IDM_DISPLAY_TEXT,  tr(L"نص الآية فقط", L"Ayah text only").c_str());
@@ -696,7 +765,7 @@ public:
         AppendMenuW(m_opts, MF_STRING | (settings.sr_spell_muqattaat ? MF_CHECKED : 0), IDM_TOGGLE_MUQATTAAT,
                     lbl(L"تفكيك الحروف المقطعة لقارئ الشاشة", L"Spell disjointed letters", IDM_TOGGLE_MUQATTAAT).c_str());
 
-        AppendMenuW(m_opts, MF_STRING, IDM_CYCLE_THEME, lbl(L"تبديل المظهر اللوني", L"Switch colour theme", IDM_CYCLE_THEME).c_str());
+        AppendMenuW(m_opts, MF_STRING, IDM_CYCLE_THEME, lbl(L"تبديل المظهر اللوني", L"Switch color theme", IDM_CYCLE_THEME).c_str());
         AppendMenuW(mb, MF_POPUP, (UINT_PTR)m_opts, tr(L"ال&خيارات والعرض", L"&Options").c_str());
 
         // 3) المساعدة
@@ -729,7 +798,7 @@ public:
             if (!s_sc.empty()) s_lbl += L" (" + s_sc + L")";
             SetWindowTextW(btn_search, s_lbl.c_str());
         }
-        SetWindowTextW(btn_sb_copy_bm, tr(L"نسخ الآية", L"Copy selected").c_str());
+        SetWindowTextW(btn_sb_copy_bm, tr(L"نسخ الآية", L"Copy ayah").c_str());
         SetWindowTextW(btn_sb_del_bm, tr(L"حذف", L"Remove").c_str());
         SendMessageW(
             edit_sidebar_filter, EM_SETCUEBANNER, TRUE,
@@ -1050,10 +1119,12 @@ public:
             text += is_en() ? (L"   [Surah " + a.surah_name + L"]")
                             : (L"   [سورة " + a.surah_name + L"]");
         }
-        if (!settings.khatmah_verse_key.empty() && a.verse_key == settings.khatmah_verse_key) {
-            text += is_en() ? L"  [Reading bookmark]" : L"  [فاصل الختمة]";
-        } else if (std::find(settings.bookmarks.begin(), settings.bookmarks.end(), a.verse_key) != settings.bookmarks.end()) {
-            text += is_en() ? L"  [Bookmarked]" : L"  [في المفضلة]";
+        if (marks_inline()) {
+            if (!settings.khatmah_verse_key.empty() && a.verse_key == settings.khatmah_verse_key) {
+                text += is_en() ? L"  [Reading mark]" : L"  [فاصل الختمة]";
+            } else if (std::find(settings.bookmarks.begin(), settings.bookmarks.end(), a.verse_key) != settings.bookmarks.end()) {
+                text += is_en() ? L"  [Bookmarked]" : L"  [في المفضلة]";
+            }
         }
         if (settings.show_ayah_letter_count) {
             int lcnt = count_arabic_letters(a.text_simple);
@@ -1067,7 +1138,7 @@ public:
         bool is_rub = (a.rub_el_hizb_number >= 2 && db->rub_start_ids().count(a.id) > 0);
         std::wstring bm;
         if (!settings.khatmah_verse_key.empty() && a.verse_key == settings.khatmah_verse_key) {
-            bm = tr(L"فاصل الختمة (موضع التوقف)", L"reading bookmark (stop position)");
+            bm = tr(L"فاصل الختمة (موضع التوقف)", L"reading mark");
         } else if (std::find(settings.bookmarks.begin(), settings.bookmarks.end(), a.verse_key) != settings.bookmarks.end()) {
             bm = tr(L"محفوظة في المفضلة", L"bookmarked");
         }
@@ -1081,7 +1152,8 @@ public:
             bm,
             is_en(),
             lcnt,
-            settings.sr_speak_waqf
+            settings.sr_speak_waqf,
+            settings.sr_speak_marks
         );
     }
 
@@ -1094,14 +1166,8 @@ public:
         return std::max(260, (int)(rc.right - rc.left));
     }
 
-    // عرض كل هامش من هامشي الصفحة، أو صفر إن ضاقت القائمة عنهما
-    int page_margin() const {
-        if (marks_outside) return 0;
-        return ayah_list_client_width() >= DS(kPageMarginMinList) ? DS(kPageMarginWidth) : 0;
-    }
-
     // العلامة تُكتب بعد الآية في سطرها فقط إن لم يكن لها هامش داخل الإطار ولا خارجه
-    bool marks_inline() const { return !marks_outside && page_margin() == 0; }
+    bool marks_inline() const { return !marks_outside; }
 
     void invalidate_outside_marks() {
         if (!marks_outside) return;
@@ -1143,7 +1209,8 @@ public:
             if (lines.empty()) continue;
             // الصفحة الفردية على اليمين المرئي، والزوجية على اليسار، كالمصحف المفتوح
             const RECT col = ((it.ayah.page_number % 2) == 1) ? vright : vleft;
-            RECT row = {col.left - edge, list_top + ir.top, col.right, list_top + ir.bottom};
+            // الختم قد يطول عن صف قصير، فحدّه أسفل القائمة لا أسفل الصف
+            RECT row = {col.left - edge, list_top + ir.top, col.right, list_top + lr.bottom};
             draw_margin_mark(hdc, row, row.top + DS(kRowPadY), (col.right - col.left) + edge + DS(6), true, lines, pal, font_margin);
         }
         RestoreDC(hdc, saved);
@@ -1184,12 +1251,17 @@ public:
             out.push_back(tr(L"۩ سجدة", L"۩ Sajdah"));
             out.push_back(tr(L"عند المالكية", L"Maliki"));
         }
+        if (!settings.khatmah_verse_key.empty() && a.verse_key == settings.khatmah_verse_key) {
+            out.push_back(tr(L"فاصل الختمة", L"Reading mark"));
+        } else if (std::find(settings.bookmarks.begin(), settings.bookmarks.end(), a.verse_key) != settings.bookmarks.end()) {
+            out.push_back(tr(L"في المفضلة", L"Bookmarked"));
+        }
         return out;
     }
 
     // العرض المتاح لنص الآية بعد الهوامش وشريط التحديد (وزر النسخ المضمّن إن كان مفعّلًا)
     int ayah_text_width(ListItemKind kind) const {
-        int w = ayah_list_client_width() - 2 * DS(kRowPadX) - DS(kAccentWidth) - 2 * page_margin();
+        int w = ayah_list_client_width() - 2 * DS(kRowPadX) - DS(kAccentWidth);
         if (kind == ListItemKind::SurahHeader) w -= 2 * DS(kHeaderInsetX) + 28;
         if (kind == ListItemKind::Ayah && settings.show_inline_copy_btn) w -= DS(kInlineBtnWidth);
         return std::max(120, w);
@@ -2162,20 +2234,23 @@ public:
         return std::max(1, std::min(114, n));
     }
 
+    // السورة كما تبدأ في المصحف: اسمها، ثم بيانها، ثم البسملة، ثم آياتها بإعدادات النسخ
     void copy_whole_surah(int surah_num) {
         auto ayahs = db->get_surah_ayahs(surah_num);
-        std::wstring all;
+        SurahInfo s = db->get_surah(surah_num);
+        std::wstring all = s.name_uthmani + L"\r\n" + build_surah_heading(*db, surah_num, is_en()) + L"\r\n";
+        AyahInfo first;
+        if (s.bismillah_pre && db->get_ayah(1, 1, first)) {
+            all += format_ayah_custom(first, settings.copy_script, false, false, settings.copy_arabic_digits) + L"\r\n";
+        }
         for (size_t i = 0; i < ayahs.size(); ++i) {
             if (i > 0) all += L"\r\n";
             all += format_ayah_custom(ayahs[i], settings.copy_script, settings.copy_brackets,
                                       settings.copy_reference, settings.copy_arabic_digits);
         }
         set_clipboard_text(hwnd, all);
-        SurahInfo s = db->get_surah(surah_num);
-        say(tr(
-            L"نُسخت سورة " + s.name_arabic + L" كاملةً، " + std::to_wstring(ayahs.size()) + L" آية",
-            L"Copied the whole of Surah " + s.name_arabic + L", " + std::to_wstring(ayahs.size()) + L" ayahs"
-        ));
+        say(tr(L"نُسخت سورة " + s.name_arabic + L" كاملةً ببيانها، " + ayahs_ar((int)ayahs.size()),
+               L"Copied Surah " + s.name_arabic + L" with its heading, " + std::to_wstring(ayahs.size()) + L" ayahs"));
     }
 
     void go_to_surah_start(int surah_num) {
@@ -2267,7 +2342,7 @@ public:
         if (settings.khatmah_verse_key.empty()) {
             say(tr(
                 L"لم يُحدَّد فاصل الختمة بعد. اضغط M أو Ctrl+M على أي آية لتضع علامة التوقف عندها",
-                L"No reading mark set yet. Press M or Ctrl+M on any ayah to set your stop mark"
+                L"No reading mark is set yet. Press M or Ctrl+M on any ayah to set it"
             ));
             return;
         }
@@ -2483,8 +2558,9 @@ public:
             const int want = fixed + (ed ? ed_w : 0) + br_w + se_w;
             const int avail = MulDiv(width, 96, ui_dpi());          // العرض المتاح بمقاسات ٩٦ نقطة
             if (avail < want) {
-                double f = std::max(0.45, (double)(avail - fixed) / (want - fixed));
-                ed_w = (int)(ed_w * f); br_w = (int)(br_w * f); se_w = (int)(se_w * f);
+                se_w = 190;
+                double f = std::max(0.45, (double)(avail - fixed - se_w) / (ed_w + br_w));
+                ed_w = (int)(ed_w * f); br_w = (int)(br_w * f);
             }
             int x = 16;
             if (ed) {
@@ -2502,18 +2578,17 @@ public:
         }
 
         // الإطار المذهّب يحتاج هامشًا يسيرًا فوق الصفحة وتحتها (ويظهر فقط إن اتسعت النافذة للسهمين)
-        const bool frame_on = settings.show_mushaf_frame && width >= DS(kArrowMinWindow);
+        const bool frame_on = settings.show_mushaf_frame;
         int list_y = tb_h + DS(frame_on ? 24 : 10);
         int list_h = std::max(DS(100), height - list_y - DS(frame_on ? 24 : 12));
 
         // الفهرس الجانبي يُخفى تلقائيًا إن لم يبق للمصحف عرض مريح (دون تغيير الإعداد نفسه)
-        sidebar_fits = (width - DS(330 + 24)) >= DS(620);
+        sidebar_fits = (width - DS(330 + 24)) >= DS(kMinWindowWidth - 32);
         bool sb_vis = sidebar_visible();
         apply_sidebar_visibility(sb_vis);
         int sb_w = sb_vis ? DS(330) : 0;
         int sb_x = DS(12);
         int main_x = sb_vis ? (sb_x + sb_w + DS(12)) : DS(12);
-        int main_w = std::max(DS(200), width - main_x - DS(12));
 
         if (sb_vis) {
             MoveWindow(edit_sidebar_filter, sb_x, list_y, sb_w, DS(30), TRUE);
@@ -2535,44 +2610,48 @@ public:
 
         // هامشان على جانبي صفحة المصحف لسهمي التقليب
         invalidate_nav_arrows();
-        const bool arrows_on = width >= DS(kArrowMinWindow);
-        const int gutter = arrows_on ? DS(kArrowGutter) : 0;
-        int page_x = main_x + gutter;
-        int page_w = std::max(DS(200), main_w - 2 * gutter);
+        // من الخارج إلى الداخل: السهم عند حافة النافذة، ثم عمود العلامات، ثم الإطار، ثم الصفحة.
+        // إن ضاق المكان (شاشة أصغر من أقل عرض للنافذة) يتنازل السهمان أولًا، ثم يضيق عمود العلامات
+        const int arrow_d = DS(kArrowDiameter), gap = DS(6), frame_out = frame_on ? DS(16) : DS(4);
+        const int lx = sb_vis ? (main_x + DS(2)) : DS(kArrowEdge);
+        const int rx = width - DS(kArrowEdge) - arrow_d;
+        int col_w = DS(kPageMarginWidth);
+        auto room = [&](bool with_arrows, int col) {
+            const int l = with_arrows ? (lx + arrow_d + DS(4)) : main_x;
+            const int r_edge = with_arrows ? (rx - DS(4)) : (width - DS(12));
+            return r_edge - l - 2 * (col + gap + frame_out);
+        };
+        const bool arrows_on = room(true, col_w) >= DS(kPageMinWidth);
+        if (!arrows_on && room(false, col_w) < DS(kPageMinWidth)) {
+            col_w = std::max(DS(52), col_w - (DS(kPageMinWidth) - room(false, col_w) + 1) / 2);
+        }
+        const bool outside = room(arrows_on, col_w) >= DS(200);
+        if (outside != marks_outside) {
+            marks_outside = outside;
+            if (ayah_rows_width != 0) ayah_rows_width = -1;   // يُعاد بناء الصفوف بالعلامات أو بدونها
+        }
+        const int side = outside ? (col_w + gap + frame_out) : frame_out;
+        const int left_edge = arrows_on ? (lx + arrow_d + DS(4)) : main_x;
+        const int right_edge = arrows_on ? (rx - DS(4)) : (width - DS(12));
+        int page_x = left_edge + side;
+        int page_w = std::max(DS(200), right_edge - left_edge - 2 * side);
         // في الشاشة الكبيرة لا تتمدد الصفحة بعرضها كله (سطر طويل يُتعب العين ويباعد كلمات سطور المصحف):
-        // للصفحة عرض أقصى يتبع حجم خط القرآن، وتتوسط المساحة ومعها إطارها وسهماها
+        // للصفحة عرض أقصى يتبع حجم خط القرآن، وتتوسط المساحة ومعها إطارها وعلامات هامشها
         const int em = MulDiv(settings.quran_font_size, ui_dpi(), 72);
         const int max_page_w = std::max(DS(kPageMaxWidth), em * kPageMaxEm);
-        int page_shift = 0;
         if (page_w > max_page_w) {
-            page_shift = (page_w - max_page_w) / 2;
-            page_x += page_shift;
+            page_x += (page_w - max_page_w) / 2;
             page_w = max_page_w;
         }
-        int cy = list_y + list_h / 2;
-        int r = DS(kArrowDiameter) / 2;
-        // كل سهم عند الحافة الخارجية لهامشه (حافة النافذة، أو حافة الفهرس الجانبي إن ظهر)
-        int lx = sb_vis ? (main_x + DS(2)) : DS(kArrowEdge);
-        int rx = width - DS(kArrowEdge) - DS(kArrowDiameter);
-        // علامات الهامش خارج الإطار إن اتسع لها ما بين الإطار والسهم (والسهمان حينئذ عند حافتي النافذة)
         {
-            const int col_w = DS(kPageMarginWidth), gap = DS(6);
-            const int frame_out = frame_on ? DS(16) : DS(4);
             const int outer_l = page_x - frame_out, outer_r = page_x + page_w + frame_out;
-            const int left_limit = arrows_on ? (lx + DS(kArrowDiameter) + DS(4)) : main_x;
-            const int right_limit = arrows_on ? (rx - DS(4)) : (width - DS(12));
-            const bool outside = (outer_l - gap - col_w >= left_limit) && (outer_r + gap + col_w <= right_limit);
-            if (outside != marks_outside) {
-                marks_outside = outside;
-                if (ayah_rows_width != 0) ayah_rows_width = -1;   // يُعاد بناء الصفوف بلا هامش داخلي أو به
-            }
             mark_col_left = {outer_l - gap - col_w, list_y, outer_l - gap, list_y + list_h};
             mark_col_right = {outer_r + gap, list_y, outer_r + gap + col_w, list_y + list_h};
         }
-        // السهمان بجوار الصفحة نفسها (أو عند حافتي النافذة إن كانت العلامات بينهما وبين الإطار)؛
-        // أما علامات ملء الشاشة والإغلاق فتبقى في ركني النافذة
-        const int arrow_shift = marks_outside ? 0 : page_shift;
-        const int ax_l = lx + arrow_shift, ax_r = rx - arrow_shift;
+        int cy = list_y + list_h / 2;
+        int r = arrow_d / 2;
+        // السهمان عند حافتي النافذة (أو حافة الفهرس الجانبي)، وعلامتا ملء الشاشة والإغلاق في ركنيها
+        const int ax_l = lx, ax_r = rx;
         RECT logical_left = {ax_l, cy - r, ax_l + DS(kArrowDiameter), cy + r};
         RECT logical_right = {ax_r, cy - r, ax_r + DS(kArrowDiameter), cy + r};
         // في النافذة المعكوسة يكون الطرف المنطقي الأيمن هو اليسار المرئي
@@ -2639,7 +2718,7 @@ static void show_surah_context_menu(int x, int y, int surah_num, bool with_open,
     std::wstring sc_si = g_app->sc(IDM_SURAH_INFO);
     AppendMenuW(menu, MF_STRING, IDM_SURAH_INFO,
                 (g_app->tr(L"معلومات عن السورة...", L"Surah information...") + (sc_si.empty() ? L"" : (L"\t" + sc_si))).c_str());
-    AppendMenuW(menu, MF_STRING, IDM_COPY_SURAH_HEAD, g_app->tr(L"نسخ بيان السورة", L"Copy the surah heading").c_str());
+    AppendMenuW(menu, MF_STRING, IDM_COPY_SURAH_HEAD, g_app->tr(L"نسخ بيانات السورة...", L"Copy surah details...").c_str());
     AppendMenuW(menu, MF_STRING, IDM_COPY_SURAH_FULL, g_app->tr(L"نسخ السورة كاملة", L"Copy the whole surah").c_str());
     if (!with_open) {
         std::wstring sc_mc = g_app->sc(IDM_MULTI_COPY);
@@ -3036,6 +3115,125 @@ static LRESULT CALLBACK SidebarBookmarksSubclassProc(HWND hwnd, UINT msg, WPARAM
     return CallWindowProcW(g_orig_sb_bm_proc, hwnd, msg, wParam, lParam);
 }
 
+// بيانات السورة سطرًا سطرًا: لنافذة معلوماتها ولنافذة نسخ بياناتها
+static std::vector<std::wstring> build_surah_info_lines(int target_surah_num) {
+            SurahInfo s = g_app->db->get_surah(target_surah_num);
+            std::wstring s_name = s.name_arabic;
+            auto s_ayahs = g_app->db->get_surah_ayahs(s.number);
+            int total_words = 0, total_letters = 0, total_allah = 0, sajdahs = 0;
+            int min_juz = 99, max_juz = 0, min_ruku = 9999, max_ruku = 0;
+            int longest_ayah = 0, longest_letters = -1;
+            int shortest_ayah = 0, shortest_letters = 999999;
+            std::vector<const std::wstring*> surah_texts;
+            for (const auto& ay : s_ayahs) surah_texts.push_back(&ay.text_simple);
+            const std::wstring surah_letter_freq = letter_frequency_text(surah_texts);
+            for (const auto& ay : s_ayahs) {
+                min_juz = std::min(min_juz, ay.juz_number);
+                max_juz = std::max(max_juz, ay.juz_number);
+                min_ruku = std::min(min_ruku, ay.ruku_number);
+                max_ruku = std::max(max_ruku, ay.ruku_number);
+                if (find_sajdah_place(ay.verse_key)) ++sajdahs;
+
+                int ay_letters = count_arabic_letters(ay.text_simple);
+                if (ay_letters > longest_letters) { longest_letters = ay_letters; longest_ayah = ay.ayah_number; }
+                if (ay_letters < shortest_letters) { shortest_letters = ay_letters; shortest_ayah = ay.ayah_number; }
+
+                std::wstring word;
+                auto flush_w = [&]() {
+                    if (word.empty()) return;
+                    bool has_l = false;
+                    int lc = 0;
+                    std::wstring norm;
+                    for (wchar_t ch : word) {
+                        if ((ch >= 0x0621 && ch <= 0x064A) || ch == 0x0671) {
+                            has_l = true;
+                            ++lc;
+                            wchar_t n = ch;
+                            if (n == 0x0623 || n == 0x0625 || n == 0x0622 || n == 0x0671) n = 0x0627;
+                            else if (n == 0x0649) n = 0x064A;
+                            else if (n == 0x0629) n = 0x0647;
+                            norm.push_back(n);
+                        }
+                    }
+                    if (has_l) {
+                        ++total_words;
+                        total_letters += lc;
+                        if (norm == L"الله" || norm == L"لله" || norm == L"والله" || norm == L"بالله" ||
+                            norm == L"فالله" || norm == L"تالله" || norm == L"ولله" || norm == L"فلله" ||
+                            norm == L"ابالله" || norm == L"وبالله" || norm == L"فبالله" || norm == L"االله") {
+                            ++total_allah;
+                        }
+                    }
+                    word.clear();
+                };
+                for (wchar_t ch : ay.text_simple) {
+                    if (ch == L' ' || ch == L'\t' || ch == L'\r' || ch == L'\n') flush_w();
+                    else word.push_back(ch);
+                }
+                flush_w();
+            }
+            int ruku_cnt = (max_ruku >= min_ruku) ? (max_ruku - min_ruku + 1) : 1;
+            SurahHeadingInfo sh = g_app->db->get_surah_heading_info(s.number);
+
+            std::vector<std::wstring> lines;
+            lines.push_back(L"۞ " + s.name_uthmani + L" ۞");   // نص قرآني: بالعربية في الواجهتين
+            if (g_app->is_en()) {
+                lines.push_back(L"Surah: " + s.name_arabic);
+                lines.push_back(L"Order in the Mushaf: surah " + std::to_wstring(s.number) + L" of 114");
+                lines.push_back(L"Order of revelation: " + std::to_wstring(s.revelation_order));
+                lines.push_back(L"Place of revelation: " + std::wstring((sh.type.empty() ? s.revelation_place : sh.type) == L"مكية" ? L"Meccan" : L"Medinan"));
+                if (!sh.excepted_verses.empty()) {
+                    std::wstring exc_txt = L"Excepted ayahs: " + sh.excepted_verses_en;
+                    if (!sh.place_note_en.empty()) exc_txt += L" (" + sh.place_note_en + L")";
+                    lines.push_back(exc_txt);
+                } else {
+                    lines.push_back(L"Excepted ayahs: none");
+                    if (!sh.place_note_en.empty()) lines.push_back(L"Revelation note: " + sh.place_note_en);
+                }
+                lines.push_back(L"Number of ayahs: " + std::to_wstring(s.verses_count));
+                lines.push_back(L"Pages (" + g_app->edition_short_label() + L"): " + g_app->page_range_text(s.start_page, s.end_page));
+                lines.push_back(L"Juz: " + (min_juz == max_juz ? std::to_wstring(min_juz) : (std::to_wstring(min_juz) + L" - " + std::to_wstring(max_juz))));
+                lines.push_back(L"Rukus in the surah: " + std::to_wstring(ruku_cnt) + L" (Ruku " + std::to_wstring(min_ruku) + L" - " + std::to_wstring(max_ruku) + L")");
+                lines.push_back(L"Words: " + std::to_wstring(total_words));
+                lines.push_back(L"Letters: " + std::to_wstring(total_letters) + L" (without diacritics and spaces)");
+                if (!surah_letter_freq.empty()) lines.push_back(L"Letter breakdown in the surah: " + surah_letter_freq);
+                if (longest_ayah > 0) {
+                    lines.push_back(L"Longest ayah: ayah " + std::to_wstring(longest_ayah) + L" (" + std::to_wstring(longest_letters) + L" letters) • Shortest ayah: ayah " + std::to_wstring(shortest_ayah) + L" (" + std::to_wstring(shortest_letters) + L" letters)");
+                }
+                lines.push_back(L"The name of Allah (الله) occurs: " + std::to_wstring(total_allah) + ((total_allah) == 1 ? L" time" : L" times") + L" • Sajdah places: " + std::to_wstring(sajdahs));
+                lines.push_back(L"Surah summary: " + build_surah_heading(*g_app->db, s.number, true));
+            } else {
+                lines.push_back(L"اسم السورة: سورة " + s.name_arabic);
+                lines.push_back(L"ترتيبها في المصحف: السورة رقم " + std::to_wstring(s.number) + L" من 114");
+                lines.push_back(L"ترتيب نزولها: " + std::to_wstring(s.revelation_order));
+                lines.push_back(L"مكان النزول: " + (sh.type.empty() ? s.revelation_place : sh.type));
+                if (!sh.excepted_verses.empty()) {
+                    bool multi_exc = (sh.excepted_verses.find(L'،') != std::wstring::npos || sh.excepted_verses.find(L'-') != std::wstring::npos);
+                    std::wstring exc_txt = std::wstring(multi_exc ? L"الآيات المستثناة: الآيات " : L"الآيات المستثناة: الآية ") + to_arabic_digits(sh.excepted_verses);
+                    if (!sh.place_note.empty()) exc_txt += L" (" + to_arabic_digits(sh.place_note) + L")";
+                    lines.push_back(exc_txt);
+                } else {
+                    lines.push_back(L"الآيات المستثناة: لا توجد آيات مستثناة في هذه السورة");
+                    if (!sh.place_note.empty()) lines.push_back(L"ملاحظة النزول: " + to_arabic_digits(sh.place_note));
+                }
+                lines.push_back(L"عدد آياتها (بالعدّ الكوفي): " + ayahs_ar(s.verses_count));
+                lines.push_back(L"صفحاتها (" + g_app->edition_short_label() + L"): " + g_app->page_range_text(s.start_page, s.end_page));
+                lines.push_back(L"نطاق الأجزاء: " + (min_juz == max_juz ? (L"الجزء " + std::to_wstring(min_juz)) : (L"من الجزء " + std::to_wstring(min_juz) + L" إلى الجزء " + std::to_wstring(max_juz))));
+                lines.push_back(L"الركوعات في السورة: " + rukus_ar(ruku_cnt) + (min_ruku == max_ruku ? (L" (الركوع " + std::to_wstring(min_ruku) + L")") : (L" (من الركوع " + std::to_wstring(min_ruku) + L" إلى " + std::to_wstring(max_ruku) + L")")));
+                lines.push_back(L"عدد الكلمات: " + words_ar(total_words));
+                lines.push_back(L"عدد الحروف في السورة: " + letters_ar(total_letters) + L" (دون التشكيل والمسافات)");
+                if (!surah_letter_freq.empty()) lines.push_back(L"تفصيل الحروف في السورة: " + surah_letter_freq);
+                if (longest_ayah > 0) {
+                    lines.push_back(L"أطول آية: الآية " + std::to_wstring(longest_ayah) + L" (" + letters_ar(longest_letters) + L") • أقصر آية: الآية " + std::to_wstring(shortest_ayah) + L" (" + letters_ar(shortest_letters) + L")");
+                }
+                lines.push_back(L"ورود لفظ الجلالة «الله»: " + (total_allah ? times_ar(total_allah) : std::wstring(L"لم يرد في السورة")) +
+                                L" • مواضع السجود: " + (sajdahs ? std::to_wstring(sajdahs) : std::wstring(L"لا توجد")));
+                lines.push_back(L"بيان السورة: " + build_surah_heading(*g_app->db, s.number, false));
+            }
+            if (!g_app->is_en()) for (auto& l : lines) l = to_arabic_digits(l);
+            return lines;
+}
+
 static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     switch (msg) {
     // عند مغادرة النافذة (برنامج آخر أو نافذة فرعية) نحفظ موضع التركيز، وعند العودة نرجعه إليه،
@@ -3097,7 +3295,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
     case WM_GETMINMAXINFO: {
         auto* mm = reinterpret_cast<MINMAXINFO*>(lParam);
         const RECT wa = work_area_of(hwnd);   // لا يتجاوز الحد الأدنى الشاشة نفسها (تكبير كبير على شاشة صغيرة)
-        mm->ptMinTrackSize.x = std::min(DS(520), (int)(wa.right - wa.left));
+        mm->ptMinTrackSize.x = std::min(DS(kMinWindowWidth), (int)(wa.right - wa.left));
         mm->ptMinTrackSize.y = std::min(DS(400), (int)(wa.bottom - wa.top));
         return 0;
     }
@@ -3301,10 +3499,9 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                     }
                 }
 
-                const int margin = item.mushaf_line ? 0 : g_app->page_margin();
                 RECT text_rc = dis->rcItem;
-                text_rc.left += DS(kRowPadX) + margin;
-                text_rc.right -= DS(kRowPadX) + margin;
+                text_rc.left += DS(kRowPadX);
+                text_rc.right -= DS(kRowPadX);
                 if (rtl) text_rc.left += DS(kAccentWidth); else text_rc.right -= DS(kAccentWidth);
                 if (is_ayah && !item.mushaf_line && g_app->settings.show_inline_copy_btn) {
                     if (rtl) text_rc.right -= DS(kInlineBtnWidth); else text_rc.left += DS(kInlineBtnWidth);
@@ -3346,7 +3543,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 if (item.kind == ListItemKind::SurahHeader) {
                     // إطار مزخرف لاسم السورة: حدّ ذهبي مزدوج كترويسات المصاحف
                     RECT frame = dis->rcItem;
-                    InflateRect(&frame, -DS(kHeaderInsetX) - margin, -DS(kHeaderInsetY));
+                    InflateRect(&frame, -DS(kHeaderInsetX), -DS(kHeaderInsetY));
                     frame.bottom = std::max(frame.top + 10, (LONG)frame.bottom);
                     HBRUSH fill = CreateSolidBrush(selected ? pal.selected_bg : pal.paper_bg);
                     FillRect(dis->hDC, &frame, fill);
@@ -3371,15 +3568,6 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 } else {
                     text_rc.top += (is_ayah && item.seg_index > 0) ? 0 : DS(kRowPadY);
                     text_rc.bottom -= (is_ayah && item.seg_index + 1 < item.seg_count) ? 0 : DS(kRowPadY);
-                }
-
-                // علامة الهامش بجوار أول سطر من الآية، في الهامش الخارجي لصفحتها
-                if (is_ayah && margin > 0 && item.seg_index == 0) {
-                    auto mark = g_app->margin_mark_lines(item.ayah);
-                    if (!mark.empty()) {
-                        const bool visual_right = (item.ayah.page_number % 2) == 1;
-                        draw_margin_mark(dis->hDC, dis->rcItem, text_rc.top, margin, visual_right == rtl, mark, pal, g_app->font_margin);
-                    }
                 }
 
                 HGDIOBJ old_f = SelectObject(dis->hDC, g_app->font_for_kind(item.kind));
@@ -3602,9 +3790,15 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         case IDM_QUICK_INFO:       if (g_app->require_ayah_row()) g_app->announce_quick_info(); return 0;
 
         case IDM_COPY_SURAH_HEAD: {
-            std::wstring htxt = build_surah_heading(*g_app->db, g_app->take_context_surah(), g_app->is_en());
-            set_clipboard_text(hwnd, htxt);
-            g_app->say(g_app->tr(L"نُسخ بيان السورة", L"Copied surah heading to clipboard"));
+            const int n = g_app->take_context_surah();
+            const std::wstring name = g_app->db->get_surah(n).name_arabic;
+            auto items = build_surah_info_lines(n);
+            for (auto& l : items) { replace_all(l, L"۞ ", L""); replace_all(l, L" ۞", L""); }
+            show_check_copy_dialog(hwnd, g_app->settings,
+                g_app->tr(L"نسخ بيانات سورة " + name, L"Copy details of Surah " + name),
+                g_app->tr(L"البيانات كلها محددة. اضغط المسافة لإلغاء تحديد ما لا تريده، ثم Enter للنسخ:",
+                          L"All details are selected. Press Space to unselect what you do not want, then Enter to copy:"),
+                items, g_app->is_en(), g_app->font_ui, &ScreenReaderEngine::instance());
             return 0;
         }
         case IDM_COPY_SURAH_FULL:
@@ -3627,7 +3821,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 );
             }
             set_clipboard_text(hwnd, all);
-            g_app->say(g_app->tr(L"نُسخت الآيات المعروضة كلها", L"Copied all displayed ayahs to clipboard"));
+            g_app->say(g_app->tr(L"نُسخت الآيات المعروضة كلها", L"Copied all displayed ayahs"));
             return 0;
         }
 
@@ -3834,20 +4028,20 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"﴿ " + a->text_uthmani + L" ﴾");
                 lines.push_back(L"Surah: " + s_name + L" (Surah #" + std::to_wstring(a->surah_number) + L" of 114, " + rev_place + L")");
                 if (ay_excepted) {
-                    std::wstring exc_msg = L"Revelation Exception: This ayah is excepted from the surah's revelation type";
-                    if (!sh.place_note.empty()) exc_msg += L" (" + sh.place_note + L")";
+                    std::wstring exc_msg = L"Revelation exception: this ayah differs from the rest of the surah in its place of revelation";
+                    if (!sh.place_note_en.empty()) exc_msg += L" (" + sh.place_note_en + L")";
                     lines.push_back(exc_msg);
                 }
-                lines.push_back(L"Ayah Number: " + std::to_wstring(a->ayah_number) + L" of " + std::to_wstring(s.verses_count));
-                if (a->ayah_number == 1) lines.push_back(L"Position in Surah: First ayah of the surah");
-                else if (a->ayah_number == s.verses_count) lines.push_back(L"Position in Surah: Last ayah of the surah");
-                lines.push_back(L"Global Ayah Order: " + std::to_wstring(a->id) + L" of 6,236");
+                lines.push_back(L"Ayah number: " + std::to_wstring(a->ayah_number) + L" of " + std::to_wstring(s.verses_count));
+                if (a->ayah_number == 1) lines.push_back(L"Position in the surah: first ayah");
+                else if (a->ayah_number == s.verses_count) lines.push_back(L"Position in the surah: last ayah");
+                lines.push_back(L"Order in the Quran: " + std::to_wstring(a->id) + L" of 6,236");
                 lines.push_back(L"Words: " + std::to_wstring(st.words));
-                lines.push_back(L"Letter Counter: " + std::to_wstring(st.letters) + L" letters (without diacritics/spaces)");
-                if (!letter_freq.empty()) lines.push_back(L"Letter Breakdown: " + letter_freq);
-                lines.push_back(L"Occurrences of the name of Allah (الله): " + (st.allah ? std::to_wstring(st.allah) + L" time(s)" : L"Does not occur"));
+                lines.push_back(L"Letters: " + std::to_wstring(st.letters) + L" (without diacritics and spaces)");
+                if (!letter_freq.empty()) lines.push_back(L"Letter breakdown: " + letter_freq);
+                lines.push_back(L"The name of Allah (الله) occurs: " + (st.allah ? std::to_wstring(st.allah) + ((st.allah) == 1 ? L" time" : L" times") : L"does not occur"));
                 if (other_places.empty()) {
-                    lines.push_back(L"Repetition: Does not occur elsewhere in the Quran");
+                    lines.push_back(L"Repetition: this text occurs nowhere else in the Quran");
                 } else {
                     std::wstring joined;
                     for (size_t i = 0; i < other_places.size() && i < 15; ++i) {
@@ -3855,13 +4049,13 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                         joined += other_places[i];
                     }
                     if (other_places.size() > 15) joined += L" ...";
-                    lines.push_back(L"Repetition (" + std::to_wstring(other_places.size()) + L" other places): " + joined);
+                    lines.push_back(L"Same text elsewhere (" + std::to_wstring(other_places.size()) + L"): " + joined);
                 }
                 lines.push_back(L"Page (" + g_app->edition_short_label() + L"): " + std::to_wstring(a->page_number) + L" of " + std::to_wstring(g_app->db->page_count()));
                 lines.push_back(L"Juz: " + std::to_wstring(a->juz_number) + L" of 30 • Hizb: " + std::to_wstring(a->hizb_number) + L" of 60");
                 lines.push_back(L"Quarter: " + std::to_wstring(a->rub_el_hizb_number) + L" of 240 (" + std::wstring(q_en[q_idx]) + L" of Hizb " + std::to_wstring(a->hizb_number) + L")");
                 lines.push_back(L"Ruku: " + std::to_wstring(a->ruku_number) + L" of 558");
-                lines.push_back(L"Seven Manzil: " + std::to_wstring(a->manzil_number) + L" of 7 (" + manzil_day_label(a->manzil_number, true) + L")");
+                lines.push_back(L"Manzil: " + std::to_wstring(a->manzil_number) + L" of 7 (" + manzil_day_label(a->manzil_number, true) + L")");
             } else {
                 lines.push_back(L"﴿ " + a->text_uthmani + L" ﴾");
                 lines.push_back(L"السورة: سورة " + s_name + L" (رقم " + std::to_wstring(a->surah_number) + L" من 114 — " + rev_place + L")");
@@ -3910,125 +4104,12 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         }
 
         case IDM_SURAH_INFO: {
-            int target_surah_num = (g_app->pending_surah_info_num > 0) ? g_app->pending_surah_info_num : g_app->current_surah;
-            g_app->pending_surah_info_num = 0;
-            SurahInfo s = g_app->db->get_surah(target_surah_num);
-            std::wstring s_name = s.name_arabic;
-            auto s_ayahs = g_app->db->get_surah_ayahs(s.number);
-            int total_words = 0, total_letters = 0, total_allah = 0, sajdahs = 0;
-            int min_juz = 99, max_juz = 0, min_ruku = 9999, max_ruku = 0;
-            int longest_ayah = 0, longest_letters = -1;
-            int shortest_ayah = 0, shortest_letters = 999999;
-            std::vector<const std::wstring*> surah_texts;
-            for (const auto& ay : s_ayahs) surah_texts.push_back(&ay.text_simple);
-            const std::wstring surah_letter_freq = letter_frequency_text(surah_texts);
-            for (const auto& ay : s_ayahs) {
-                min_juz = std::min(min_juz, ay.juz_number);
-                max_juz = std::max(max_juz, ay.juz_number);
-                min_ruku = std::min(min_ruku, ay.ruku_number);
-                max_ruku = std::max(max_ruku, ay.ruku_number);
-                if (find_sajdah_place(ay.verse_key)) ++sajdahs;
-
-                int ay_letters = count_arabic_letters(ay.text_simple);
-                if (ay_letters > longest_letters) { longest_letters = ay_letters; longest_ayah = ay.ayah_number; }
-                if (ay_letters < shortest_letters) { shortest_letters = ay_letters; shortest_ayah = ay.ayah_number; }
-
-                std::wstring word;
-                auto flush_w = [&]() {
-                    if (word.empty()) return;
-                    bool has_l = false;
-                    int lc = 0;
-                    std::wstring norm;
-                    for (wchar_t ch : word) {
-                        if ((ch >= 0x0621 && ch <= 0x064A) || ch == 0x0671) {
-                            has_l = true;
-                            ++lc;
-                            wchar_t n = ch;
-                            if (n == 0x0623 || n == 0x0625 || n == 0x0622 || n == 0x0671) n = 0x0627;
-                            else if (n == 0x0649) n = 0x064A;
-                            else if (n == 0x0629) n = 0x0647;
-                            norm.push_back(n);
-                        }
-                    }
-                    if (has_l) {
-                        ++total_words;
-                        total_letters += lc;
-                        if (norm == L"الله" || norm == L"لله" || norm == L"والله" || norm == L"بالله" ||
-                            norm == L"فالله" || norm == L"تالله" || norm == L"ولله" || norm == L"فلله" ||
-                            norm == L"ابالله" || norm == L"وبالله" || norm == L"فبالله" || norm == L"االله") {
-                            ++total_allah;
-                        }
-                    }
-                    word.clear();
-                };
-                for (wchar_t ch : ay.text_simple) {
-                    if (ch == L' ' || ch == L'\t' || ch == L'\r' || ch == L'\n') flush_w();
-                    else word.push_back(ch);
-                }
-                flush_w();
-            }
-            int ruku_cnt = (max_ruku >= min_ruku) ? (max_ruku - min_ruku + 1) : 1;
-            SurahHeadingInfo sh = g_app->db->get_surah_heading_info(s.number);
-
-            std::vector<std::wstring> lines;
-            lines.push_back(L"۞ " + s.name_uthmani + L" ۞");   // نص قرآني: بالعربية في الواجهتين
-            if (g_app->is_en()) {
-                lines.push_back(L"Surah Name: " + s.name_arabic);
-                lines.push_back(L"Mushaf Order: Surah #" + std::to_wstring(s.number) + L" of 114");
-                lines.push_back(L"Revelation Order: #" + std::to_wstring(s.revelation_order));
-                lines.push_back(L"Revelation Place: " + std::wstring((sh.type.empty() ? s.revelation_place : sh.type) == L"مكية" ? L"Meccan" : L"Medinan"));
-                if (!sh.excepted_verses.empty()) {
-                    std::wstring exc_txt = L"Excepted Ayahs: Ayah " + to_western_digits(sh.excepted_verses);
-                    if (!sh.place_note.empty()) exc_txt += L" (" + to_western_digits(sh.place_note) + L")";
-                    lines.push_back(exc_txt);
-                } else {
-                    lines.push_back(L"Excepted Ayahs: None");
-                    if (!sh.place_note.empty()) lines.push_back(L"Revelation Note: " + to_western_digits(sh.place_note));
-                }
-                lines.push_back(L"Verses Count: " + std::to_wstring(s.verses_count) + L" verses");
-                lines.push_back(L"Pages (" + g_app->edition_short_label() + L"): " + g_app->page_range_text(s.start_page, s.end_page));
-                lines.push_back(L"Juz Span: " + (min_juz == max_juz ? std::to_wstring(min_juz) : (std::to_wstring(min_juz) + L" - " + std::to_wstring(max_juz))));
-                lines.push_back(L"Rukus in Surah: " + std::to_wstring(ruku_cnt) + L" (Ruku " + std::to_wstring(min_ruku) + L" - " + std::to_wstring(max_ruku) + L")");
-                lines.push_back(L"Words: " + std::to_wstring(total_words));
-                lines.push_back(L"Letter Counter: " + std::to_wstring(total_letters) + L" letters (without diacritics/spaces)");
-                if (!surah_letter_freq.empty()) lines.push_back(L"Letter Breakdown in the Surah: " + surah_letter_freq);
-                if (longest_ayah > 0) {
-                    lines.push_back(L"Longest Ayah: Ayah " + std::to_wstring(longest_ayah) + L" (" + std::to_wstring(longest_letters) + L" letters) • Shortest Ayah: Ayah " + std::to_wstring(shortest_ayah) + L" (" + std::to_wstring(shortest_letters) + L" letters)");
-                }
-                lines.push_back(L"Occurrences of the name of Allah (الله): " + std::to_wstring(total_allah) + L" time(s) • Sajdahs: " + std::to_wstring(sajdahs));
-                lines.push_back(L"Heading Summary: " + build_surah_heading(*g_app->db, s.number, true));
-            } else {
-                lines.push_back(L"اسم السورة: سورة " + s.name_arabic);
-                lines.push_back(L"ترتيبها في المصحف: السورة رقم " + std::to_wstring(s.number) + L" من 114");
-                lines.push_back(L"ترتيب نزولها: " + std::to_wstring(s.revelation_order));
-                lines.push_back(L"مكان النزول: " + (sh.type.empty() ? s.revelation_place : sh.type));
-                if (!sh.excepted_verses.empty()) {
-                    bool multi_exc = (sh.excepted_verses.find(L'،') != std::wstring::npos || sh.excepted_verses.find(L'-') != std::wstring::npos);
-                    std::wstring exc_txt = std::wstring(multi_exc ? L"الآيات المستثناة: الآيات " : L"الآيات المستثناة: الآية ") + to_arabic_digits(sh.excepted_verses);
-                    if (!sh.place_note.empty()) exc_txt += L" (" + to_arabic_digits(sh.place_note) + L")";
-                    lines.push_back(exc_txt);
-                } else {
-                    lines.push_back(L"الآيات المستثناة: لا توجد آيات مستثناة في هذه السورة");
-                    if (!sh.place_note.empty()) lines.push_back(L"ملاحظة النزول: " + to_arabic_digits(sh.place_note));
-                }
-                lines.push_back(L"عدد آياتها (بالعدّ الكوفي): " + std::to_wstring(s.verses_count) + L" آية");
-                lines.push_back(L"صفحاتها (" + g_app->edition_short_label() + L"): " + g_app->page_range_text(s.start_page, s.end_page));
-                lines.push_back(L"نطاق الأجزاء: " + (min_juz == max_juz ? (L"الجزء " + std::to_wstring(min_juz)) : (L"من الجزء " + std::to_wstring(min_juz) + L" إلى الجزء " + std::to_wstring(max_juz))));
-                lines.push_back(L"الركوعات في السورة: " + rukus_ar(ruku_cnt) + L" (من الركوع " + std::to_wstring(min_ruku) + L" إلى " + std::to_wstring(max_ruku) + L")");
-                lines.push_back(L"عدد الكلمات: " + words_ar(total_words));
-                lines.push_back(L"عدد الحروف في السورة: " + letters_ar(total_letters) + L" (دون التشكيل والمسافات)");
-                if (!surah_letter_freq.empty()) lines.push_back(L"تفصيل الحروف في السورة: " + surah_letter_freq);
-                if (longest_ayah > 0) {
-                    lines.push_back(L"أطول آية: الآية " + std::to_wstring(longest_ayah) + L" (" + letters_ar(longest_letters) + L") • أقصر آية: الآية " + std::to_wstring(shortest_ayah) + L" (" + letters_ar(shortest_letters) + L")");
-                }
-                lines.push_back(L"ورود لفظ الجلالة «الله»: " + (total_allah ? times_ar(total_allah) : std::wstring(L"لم يرد في السورة")) +
-                                L" • مواضع السجود: " + std::to_wstring(sajdahs));
-                lines.push_back(L"بيان السورة: " + build_surah_heading(*g_app->db, s.number, false));
-            }
-            if (!g_app->is_en()) for (auto& l : lines) l = to_arabic_digits(l);
+            const int n = g_app->take_context_surah();
+            const std::wstring name = g_app->db->get_surah(n).name_arabic;
+            auto lines = build_surah_info_lines(n);
             show_line_reader_dialog(
                 hwnd,
-                g_app->tr(L"معلومات عن سورة " + s_name, L"Surah " + s_name + L" — information"),
+                g_app->tr(L"معلومات عن سورة " + name, L"Surah " + name + L" — information"),
                 lines, g_app->is_en(), g_app->font_ui, &ScreenReaderEngine::instance()
             );
             return 0;
@@ -4046,9 +4127,9 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"Enter / Ctrl+C / F8: Copy current ayah to clipboard");
                 lines.push_back(L"Ctrl+Alt+C: Multiple copy — the current unit's ayahs with checkboxes; Space selects, Enter copies");
                 lines.push_back(L"Mouse: drag over ayahs to highlight them (each drag adds to the highlight, Ctrl+click toggles one ayah); Copy then copies all highlighted ayahs");
-                lines.push_back(L"M / Ctrl+M: Set Reading Stop Mark (Khatmah) at current ayah");
+                lines.push_back(L"M / Ctrl+M: Set the reading mark at the current ayah, or remove it if it is already there");
                 lines.push_back(L"B: Add or remove current ayah from bookmarks");
-                lines.push_back(L"I: Speak quick ayah position info");
+                lines.push_back(L"I: Speak the position of the ayah");
             } else {
                 lines.push_back(L"سهم لأعلى / سهم لأسفل: التنقل بين الآيات وقراءتها فورًا");
                 lines.push_back(L"PageDown / PageUp: الانتقال إلى الوحدة التالية أو السابقة (سورة / صفحة / جزء / ربع / حزب / منزلة / ركوع)");
@@ -4124,7 +4205,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             g_app->build_menus();
             g_app->load_current_browse_unit(g_app->current_ayah_num, g_app->current_surah);
             g_app->say(g_app->settings.mushaf_lines
-                           ? g_app->tr(L"سطور الطبعة كما في المصحف", L"Edition lines as in the Mushaf")
+                           ? g_app->tr(L"سطور الطبعة كما في المصحف", L"Page lines as in the Mushaf")
                            : g_app->tr(L"الآيات آيةً آية", L"One ayah per row"));
             return 0;
 
@@ -4676,6 +4757,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
         while (!arg.empty() && (arg.back() == L' ' || arg.back() == L'"')) arg.pop_back();
         return mushaf::run_check_edition(arg, !quiet);
     }
+    if (lpCmdLine && std::wcsstr(lpCmdLine, L"--sync-shortcuts") != nullptr) {
+        return mushaf::run_sync_shortcuts(std::wcsstr(lpCmdLine, L"--sync-shortcuts en") != nullptr);
+    }
     if (lpCmdLine && std::wcsstr(lpCmdLine, L"--self-test") != nullptr) {
         // إن كان الخرج موجّهًا إلى ملف أو أنبوب نكتب فيه مباشرة، وإلا نلتحق بنافذة الأوامر الأم
         HANDLE out = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -4815,7 +4899,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
         18, 122, 318, 620, app.hwnd, (HMENU)mushaf::ID_LIST_SIDEBAR_BOOKMARKS, hInstance, nullptr
     );
     app.btn_sb_copy_bm = CreateWindowExW(
-        0, L"BUTTON", app.tr(L"نسخ الآية", L"Copy selected").c_str(),
+        0, L"BUTTON", app.tr(L"نسخ الآية", L"Copy ayah").c_str(),
         WS_CHILD | WS_TABSTOP | BS_PUSHBUTTON,
         18, 748, 155, 32, app.hwnd, (HMENU)mushaf::ID_BTN_SB_COPY_BM, hInstance, nullptr
     );
