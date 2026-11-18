@@ -111,6 +111,11 @@
   .division h3 { margin-top: .3rem; }
   .division .count { color: var(--gold); font-weight: 700; }
 
+  .steps li { margin-bottom: .35rem; }
+  .table-wrap { overflow-x: auto; }
+  details { border-bottom: 1px solid var(--rule); padding: .55rem 0; }
+  summary { cursor: pointer; font-weight: 700; color: var(--green); }
+  details p { margin: .45rem 0 .2rem; }
   .note { background: var(--key-bg); border-radius: 6px; padding: .7rem 1rem; margin: 1rem 0; }
 
   footer { text-align: center; margin-top: 3rem; padding-top: 1.2rem; border-top: 1px solid var(--rule); color: var(--muted); }
@@ -143,6 +148,7 @@
   <h2 id="toc-title">محتويات الدليل</h2>
   <ol>
     <li><a href="#intro">تمهيد</a></li>
+    <li><a href="#start">ابدأ في دقيقة</a></li>
     <li><a href="#window">أقسام النافذة</a></li>
     <li><a href="#divisions">تقسيمات المصحف وطرق التصفح</a></li>
     <li><a href="#reading">التلاوة والتنقل بين الآيات</a></li>
@@ -155,6 +161,7 @@
     <li><a href="#look">المظهر والعرض</a></li>
     <li><a href="#options">نافذة الخيارات</a></li>
     <li><a href="#shortcuts">جدول الاختصارات</a></li>
+    <li><a href="#faq">أسئلة شائعة</a></li>
   </ol>
 </nav>
 
@@ -196,6 +203,18 @@
 </p>
 </section>
 
+<section aria-labelledby="start">
+<h2 id="start">ابدأ في دقيقة</h2>
+<p class="lead">خمس خطوات تكفيك لتبدأ القراءة، ثم ارجع إلى بقية الدليل متى شئت.</p>
+<ol class="steps">
+  <li><strong>اختر طريقة التصفح:</strong> <kbd>Alt+1</kbd> للسور، و<kbd>Alt+2</kbd> للصفحات، و<kbd>Alt+3</kbd> للأجزاء.</li>
+  <li><strong>اقرأ وتنقّل:</strong> السهمان <kbd>↓</kbd> و<kbd>↑</kbd> بين الآيات، و<kbd>Page Down</kbd> و<kbd>Page Up</kbd> بين الوحدات.</li>
+  <li><strong>ابحث عن آية:</strong> اضغط <kbd>Ctrl+F</kbd> واكتب كلمة منها، ولا حاجة إلى التشكيل.</li>
+  <li><strong>احفظ موضعك في الختمة:</strong> اضغط <kbd>M</kbd> عند الآية، وارجع إليها متى شئت بـ<kbd>Alt+M</kbd>.</li>
+  <li><strong>اعرف المزيد:</strong> <kbd>F1</kbd> يعرض الاختصارات، و<kbd>Shift+F1</kbd> يفتح هذا الدليل.</li>
+</ol>
+</section>
+
 <section aria-labelledby="window">
 <h2 id="window">أقسام النافذة</h2>
 <p class="lead">تتألف النافذة من ثلاثة أقسام، وبينها يُتنقَّل بمفتاح <kbd>F6</kbd>.</p>
@@ -235,6 +254,22 @@
   وأيًّا كانت طريقة التصفح فإن <kbd>Page Down</kbd> ينقلك إلى الوحدة التالية، و<kbd>Page Up</kbd> إلى السابقة،
   مع صوت هادئ لتقليب الصفحة يمكن إيقافه من الخيارات.
 </p>
+
+<h3>أيّ تقسيمة تناسبك؟</h3>
+<div class="table-wrap">
+<table>
+  <caption>خطط مقترحة لختم القرآن الكريم</caption>
+  <thead><tr><th scope="col">مدة الختمة</th><th scope="col">الوِرد اليومي</th><th scope="col">طريقة التصفح</th></tr></thead>
+  <tbody>
+    <tr><td>أسبوع</td><td>منزلة واحدة</td><td><kbd>Alt+6</kbd></td></tr>
+    <tr><td>شهر</td><td>جزء واحد</td><td><kbd>Alt+3</kbd></td></tr>
+    <tr><td>شهران</td><td>حزب واحد</td><td><kbd>Alt+5</kbd></td></tr>
+    <tr><td>أربعة أشهر</td><td>ربعان</td><td><kbd>Alt+4</kbd></td></tr>
+    <tr><td>ثمانية أشهر</td><td>ربع واحد</td><td><kbd>Alt+4</kbd></td></tr>
+  </tbody>
+</table>
+</div>
+<p>وضع فاصل الختمة عند آخر ما قرأت بحرف <kbd>M</kbd> يعيدك إليه في اليوم التالي بـ<kbd>Alt+M</kbd>.</p>
 
 <div class="division">
 <h3>السورة <span class="count">(١١٤ سورة)</span> — <kbd>Alt+1</kbd></h3>
@@ -282,9 +317,26 @@
 <div class="division">
 <h3>المنزلة <span class="count">(٧ منازل)</span> — <kbd>Alt+6</kbd></h3>
 <p>
-  المنازل السبع تقسيم قديم لمن يختم القرآن في أسبوع، منزلةً كل يوم، وقد كان عليه عمل كثير من السلف.
-  ويجمع بداياتها قولهم «فمي بشوق»: فكل حرف منها أول سورة تبدأ بها منزلة: الفاتحة، ثم المائدة، ثم يونس،
-  ثم بني إسرائيل (الإسراء)، ثم الشعراء، ثم والصافات، ثم سورة ق.
+  المنازل تقسيم للقرآن الكريم إلى سبعة أقسام، يقرأ صاحبها قسمًا كل يوم فيختم القرآن في أسبوع. ولا تُقسَّم بعدد
+  الصفحات، بل بالسور الكاملة، فلا تنقطع سورة بين يومين.
+</p>
+<div class="table-wrap">
+<table>
+  <caption>المنازل السبع</caption>
+  <thead><tr><th scope="col">اليوم</th><th scope="col">من</th><th scope="col">إلى</th><th scope="col">الحرف</th></tr></thead>
+  <tbody>
+    <tr><td>الأول</td><td>الفاتحة</td><td>النساء</td><td>ف</td></tr>
+    <tr><td>الثاني</td><td>المائدة</td><td>التوبة</td><td>م</td></tr>
+    <tr><td>الثالث</td><td>يونس</td><td>النحل</td><td>ي</td></tr>
+    <tr><td>الرابع</td><td>الإسراء (بنو إسرائيل)</td><td>الفرقان</td><td>ب</td></tr>
+    <tr><td>الخامس</td><td>الشعراء</td><td>يس</td><td>ش</td></tr>
+    <tr><td>السادس</td><td>الصافات (والصافات)</td><td>الحجرات</td><td>و</td></tr>
+    <tr><td>السابع</td><td>ق</td><td>الناس</td><td>ق</td></tr>
+  </tbody>
+</table>
+</div>
+<p>
+  ولحفظ بدايات المنازل تجمعها عبارة «فمي بشوق»، فكل حرف منها يدل على أول سورة في منزلة. والقسم الأخير هو «حزب المفصّل»، وهو من سورة ق إلى آخر المصحف.
 </p>
 </div>
 
@@ -578,6 +630,24 @@
     <tr><td><kbd>Alt+F4</kbd></td><td>الخروج من البرنامج</td></tr>
   </tbody>
 </table>
+</section>
+
+<section aria-labelledby="faq">
+<h2 id="faq">أسئلة شائعة</h2>
+<details><summary>لا أجد الفهرس الجانبي، فأين هو؟</summary>
+<p>اضغط <kbd>F9</kbd>. وإذا كانت النافذة ضيقة فكبّرها، لأن الفهرس لا يظهر إلا حين يتسع له المكان.</p></details>
+<details><summary>لا أرى سهمي تقليب الصفحة.</summary>
+<p>حرّك الفأرة فيظهران، ويختفيان بعد ثلاث ثوانٍ من سكونها حتى لا يشغلا عن القراءة.</p></details>
+<details><summary>كيف أنتقل بين طبعتي المصحف؟</summary>
+<p>اضغط <kbd>Ctrl+E</kbd>، أو اختر الطبعة من الشريط العلوي، ويبقى البرنامج على الآية نفسها.</p></details>
+<details><summary>كيف أزيل فاصل الختمة؟</summary>
+<p>قف على الآية التي عليها الفاصل واضغط <kbd>M</kbd>، أو استعمل زر «إزالة فاصل الختمة» في نافذة <kbd>Ctrl+B</kbd>.</p></details>
+<details><summary>لا أريد سماع علامات الأجزاء والأرباع مع الآيات.</summary>
+<p>افتح الخيارات بـ<kbd>Ctrl+O</kbd>، ومن تبويب «قارئات الشاشة» ألغِ تحديد نطق هذه العلامات.</p></details>
+<details><summary>الخط صغير أو كبير عليّ.</summary>
+<p>كبّره بـ<kbd>Ctrl+=</kbd>، وصغّره بـ<kbd>Ctrl+-</kbd>، وأعده إلى حجمه الأصلي بـ<kbd>Ctrl+0</kbd>.</p></details>
+<details><summary>هل تضيع إعداداتي وموضع قراءتي عند تحديث البرنامج؟</summary>
+<p>لا، فهي محفوظة في مجلد إعدادات المستخدم، ويبقى ذلك كله بعد التحديث.</p></details>
 </section>
 
 </main>
