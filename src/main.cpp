@@ -15,6 +15,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <cstring>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <vector>
@@ -528,6 +530,7 @@ public:
 
     // حفظ موضع القراءة وحجم النافذة في الإعدادات
     void save_state() {
+        flush_word_widths();
         settings.last_surah = current_surah;
         settings.last_page = current_page;
         settings.last_juz = current_juz;
@@ -1285,22 +1288,143 @@ public:
     // عرض الكلمة بالخط المحدد في السياق، محفوظًا بعد أول قياس. قياس الكلمة بالخط العثماني هو أبطأ ما في
     // بناء الصفحة، وكلمات القرآن تتكرر كثيرًا، فالحفظ يجعل الانتقال بين السور والصفحات شبه فوري.
     // المفتاح وصف الخط نفسه (اسمه وحجمه ووزنه) لا مقبضه، لأن المقبض قد يُعاد استعماله لخط آخر
-    static std::unordered_map<std::wstring, int>& word_width_cache(HDC hdc) {
-        static std::unordered_map<std::wstring, std::unordered_map<std::wstring, int>> caches;
+    using WordWidths = std::unordered_map<std::wstring, int>;
+
+    // تُحفظ قياسات خط القرآن في ملف صغير لتُستعمل في الفتحة التالية، فلا تُقاس كلمات السورة من جديد.
+    // الملف مساعد فقط: إن فُقد أو تلف أو اختلف الخط أو الحجم تجاهله البرنامج وقاس كالمعتاد.
+    struct WordWidthStore {
+        std::wstring path;   // فارغ في الاختبار الذاتي، فلا يُقرأ ملف المستخدم ولا يُكتب
+        std::wstring key;    // الخط الذي تُحفظ قياساته
+        bool dirty = false;
+    };
+    static WordWidthStore& width_store() {
+        static WordWidthStore st;
+        return st;
+    }
+    static std::unordered_map<std::wstring, WordWidths>& width_caches() {
+        static std::unordered_map<std::wstring, WordWidths> caches;
+        return caches;
+    }
+
+    static uint32_t width_file_hash(const unsigned char* p, size_t n) {
+        uint32_t h = 2166136261u;
+        for (size_t i = 0; i < n; ++i) { h ^= p[i]; h *= 16777619u; }
+        return h;
+    }
+
+    static bool save_word_widths(const std::wstring& path, const std::wstring& key, const WordWidths& words) {
+        std::vector<unsigned char> b;
+        auto put = [&](const void* d, size_t n) { const auto* c = (const unsigned char*)d; b.insert(b.end(), c, c + n); };
+        auto put32 = [&](uint32_t v) { put(&v, 4); };
+        put("MWW1", 4);
+        put32((uint32_t)key.size());
+        put(key.data(), key.size() * sizeof(wchar_t));
+        uint32_t n = 0;
+        for (const auto& kv : words) if (!kv.first.empty() && kv.first.size() <= 200) ++n;
+        put32(n);
+        for (const auto& kv : words) {
+            if (kv.first.empty() || kv.first.size() > 200) continue;
+            uint16_t len = (uint16_t)kv.first.size();
+            int32_t w = kv.second;
+            put(&len, 2);
+            put(kv.first.data(), kv.first.size() * sizeof(wchar_t));
+            put(&w, 4);
+        }
+        put32(width_file_hash(b.data(), b.size()));
+        const std::wstring tmp = path + L".tmp";
+        FILE* f = _wfopen(tmp.c_str(), L"wb");
+        if (!f) return false;
+        const bool ok = std::fwrite(b.data(), 1, b.size(), f) == b.size();
+        std::fclose(f);
+        if (!ok || !MoveFileExW(tmp.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING)) {
+            DeleteFileW(tmp.c_str());
+            return false;
+        }
+        return true;
+    }
+
+    static bool load_word_widths(const std::wstring& path, const std::wstring& key, WordWidths& out) {
+        FILE* f = _wfopen(path.c_str(), L"rb");
+        if (!f) return false;
+        std::vector<unsigned char> b;
+        unsigned char buf[65536];
+        size_t got;
+        while ((got = std::fread(buf, 1, sizeof(buf), f)) > 0 && b.size() < 16u * 1024 * 1024) b.insert(b.end(), buf, buf + got);
+        std::fclose(f);
+        if (b.size() < 16 || std::memcmp(b.data(), "MWW1", 4) != 0) return false;
+        uint32_t stored = 0;
+        std::memcpy(&stored, b.data() + b.size() - 4, 4);
+        const size_t end = b.size() - 4;
+        if (width_file_hash(b.data(), end) != stored) return false;
+        size_t pos = 4;
+        auto read32 = [&](uint32_t& v) { if (pos + 4 > end) return false; std::memcpy(&v, b.data() + pos, 4); pos += 4; return true; };
+        uint32_t key_len = 0, count = 0;
+        if (!read32(key_len) || key_len != key.size() || pos + key_len * sizeof(wchar_t) > end) return false;
+        if (key_len && std::memcmp(b.data() + pos, key.data(), key_len * sizeof(wchar_t)) != 0) return false;
+        pos += key_len * sizeof(wchar_t);
+        if (!read32(count) || count > 200000) return false;
+        WordWidths words;
+        words.reserve(count);
+        for (uint32_t i = 0; i < count; ++i) {
+            uint16_t len = 0;
+            if (pos + 2 > end) return false;
+            std::memcpy(&len, b.data() + pos, 2);
+            pos += 2;
+            if (len == 0 || len > 200 || pos + len * sizeof(wchar_t) + 4 > end) return false;
+            std::wstring w(len, L' ');
+            std::memcpy(&w[0], b.data() + pos, len * sizeof(wchar_t));
+            pos += len * sizeof(wchar_t);
+            int32_t width = 0;
+            std::memcpy(&width, b.data() + pos, 4);
+            pos += 4;
+            if (width < 0 || width > 100000) return false;
+            words.emplace(std::move(w), (int)width);
+        }
+        if (pos != end) return false;
+        out.swap(words);
+        return true;
+    }
+
+    static WordWidths& word_width_cache(HDC hdc) {
         LOGFONTW lf{};
         GetObjectW(GetCurrentObject(hdc, OBJ_FONT), sizeof(lf), &lf);
         std::wstring key = std::wstring(lf.lfFaceName) + L"|" + std::to_wstring(lf.lfHeight) + L"|" + std::to_wstring(lf.lfWeight);
-        return caches[key];
+        auto& caches = width_caches();
+        auto it = caches.find(key);
+        WordWidthStore& st = width_store();
+        if (it == caches.end()) {
+            it = caches.emplace(key, WordWidths()).first;
+            if (!st.path.empty() && load_word_widths(st.path, key, it->second)) {
+                // عيّنة تتأكد أن القياسات المحفوظة ما زالت تطابق الخط على هذا الجهاز
+                int checked = 0;
+                for (const auto& kv : it->second) {
+                    SIZE sz{};
+                    GetTextExtentPoint32W(hdc, kv.first.c_str(), (int)kv.first.size(), &sz);
+                    if (sz.cx != kv.second) { it->second.clear(); break; }
+                    if (++checked == 8) break;
+                }
+            }
+        }
+        st.key = key;
+        return it->second;
     }
 
-    static int word_width(HDC hdc, std::unordered_map<std::wstring, int>& cache, const wchar_t* w, int len) {
+    static int word_width(HDC hdc, WordWidths& cache, const wchar_t* w, int len) {
         std::wstring k(w, (size_t)len);
         auto it = cache.find(k);
         if (it != cache.end()) return it->second;
         SIZE sz{};
         GetTextExtentPoint32W(hdc, w, len, &sz);
         cache.emplace(std::move(k), (int)sz.cx);
+        width_store().dirty = true;
         return sz.cx;
+    }
+
+    static void flush_word_widths() {
+        WordWidthStore& st = width_store();
+        if (st.path.empty() || st.key.empty() || !st.dirty) return;
+        auto it = width_caches().find(st.key);
+        if (it != width_caches().end() && save_word_widths(st.path, st.key, it->second)) st.dirty = false;
     }
 
     static std::vector<std::wstring> wrap_text_lines(HDC hdc, const std::wstring& text, int width) {
@@ -4423,6 +4547,28 @@ static int run_self_test() {
     SELFTEST_CHECK(prepare_ayah_for_screen_reader(alm, true, false) == L"الم");
     {
         // العدد والمعدود
+        // ملف قياسات الكلمات: يُقرأ كما حُفظ، ويُرفض إن اختلف الخط أو نقص الملف أو تلف
+        {
+            wchar_t tdir[MAX_PATH] = {0};
+            GetTempPathW(MAX_PATH, tdir);
+            const std::wstring tf = std::wstring(tdir) + L"mushaf_word_widths_test.bin";
+            MushafAppWindow::WordWidths in{{L"كلمة", 42}, {L"ٱلْحَمْدُ", 97}}, got;
+            SELFTEST_CHECK(MushafAppWindow::save_word_widths(tf, L"Font|-35|400", in));
+            SELFTEST_CHECK(MushafAppWindow::load_word_widths(tf, L"Font|-35|400", got) && got == in);
+            got.clear();
+            SELFTEST_CHECK(!MushafAppWindow::load_word_widths(tf, L"Font|-36|400", got) && got.empty());
+            std::string raw;
+            if (FILE* f = _wfopen(tf.c_str(), L"rb")) { char c[4096]; size_t n; while ((n = std::fread(c, 1, sizeof(c), f)) > 0) raw.append(c, n); std::fclose(f); }
+            SELFTEST_CHECK(raw.size() > 20);
+            for (int mode = 0; mode < 2; ++mode) {
+                std::string bad = raw;
+                if (mode == 0) bad.resize(bad.size() / 2); else bad[bad.size() / 2] ^= 0x55;
+                if (FILE* f = _wfopen(tf.c_str(), L"wb")) { std::fwrite(bad.data(), 1, bad.size(), f); std::fclose(f); }
+                got.clear();
+                SELFTEST_CHECK(!MushafAppWindow::load_word_widths(tf, L"Font|-35|400", got) && got.empty());
+            }
+            DeleteFileW(tf.c_str());
+        }
         SELFTEST_CHECK(letters_ar(1) == L"حرف واحد");
         SELFTEST_CHECK(letters_ar(2) == L"حرفان");
         SELFTEST_CHECK(letters_ar(5) == L"٥ أحرف");
@@ -4782,6 +4928,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
     app.resolve_paths();
     app.settings.load();
     mushaf::copy_waqf_marks_enabled() = app.settings.copy_waqf_marks;
+    {
+        std::wstring dir = mushaf::AppSettings::settings_file_path();
+        const size_t cut = dir.find_last_of(L"\\/");
+        dir = (cut == std::wstring::npos) ? std::wstring() : dir.substr(0, cut + 1);
+        mushaf::MushafAppWindow::width_store().path = dir + L"word_widths.bin";
+    }
     app.load_private_fonts();
     mushaf::ScreenReaderEngine::instance().init(app.app_dir);
 
