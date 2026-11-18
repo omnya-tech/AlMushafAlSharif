@@ -435,6 +435,13 @@ inline std::wstring manzil_day_label(int manzil_number, bool en = false) {
     return en ? en_lbl[idx] : ar[idx];
 }
 
+// ما يظهر تحت اسم السورة في طبعتي المدينة: مكية أو مدنية، وعدد آياتها
+inline std::wstring build_surah_brief(const SurahInfo& s, bool en = false, bool spoken = false) {
+    const std::wstring sep = spoken ? (en ? L", " : L"، ") : L" • ";
+    if (en) return std::wstring(s.revelation_place == L"مكية" ? L"Meccan" : L"Medinan") + sep + std::to_wstring(s.verses_count) + L" verses";
+    return s.revelation_place + sep + L"آياتها " + to_arabic_digits(s.verses_count);
+}
+
 inline std::wstring build_surah_heading(const QuranDatabase& db, int surah_number, bool en = false) {
     SurahInfo s = db.get_surah(surah_number);
     SurahHeadingInfo h = db.get_surah_heading_info(surah_number);

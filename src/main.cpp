@@ -1877,12 +1877,13 @@ public:
                 }
                 add_ayah_list_row(hdc, hdr);
 
-                if (a.ayah_number == 1 && edition_details) {
+                if (a.ayah_number == 1) {
                     AyahListItemData det;
                     det.kind = ListItemKind::SurahDetails;
                     det.ayah = a;
-                    det.visual_text = build_surah_heading(*db, a.surah_number, is_en());
-                    det.spoken_text = det.visual_text;
+                    det.visual_text = edition_details ? build_surah_heading(*db, a.surah_number, is_en())
+                                                      : build_surah_brief(s, is_en());
+                    det.spoken_text = edition_details ? det.visual_text : build_surah_brief(s, is_en(), true);
                     add_ayah_list_row(hdc, det);
                 }
 
@@ -2497,7 +2498,7 @@ public:
         auto ayahs = db->get_surah_ayahs(surah_num);
         SurahInfo s = db->get_surah(surah_num);
         std::wstring all = s.name_uthmani + L"\r\n";
-        if (db->edition_has_details()) all += build_surah_heading(*db, surah_num, is_en()) + L"\r\n";
+        all += (db->edition_has_details() ? build_surah_heading(*db, surah_num, is_en()) : build_surah_brief(s, is_en())) + L"\r\n";
         AyahInfo first;
         if (s.bismillah_pre && db->get_ayah(1, 1, first)) {
             all += format_ayah_custom(first, settings.copy_script, false, false, settings.copy_arabic_digits) + L"\r\n";
@@ -2545,6 +2546,9 @@ public:
             if (r->kind == ListItemKind::SurahHeader || r->kind == ListItemKind::SurahDetails) {
                 if (db->edition_has_details()) {
                     set_clipboard_text(hwnd, build_surah_heading(*db, r->ayah.surah_number, is_en()));
+                    say(tr(L"نُسخ بيان السورة", L"Copied the surah heading"));
+                } else if (r->kind == ListItemKind::SurahDetails) {
+                    set_clipboard_text(hwnd, build_surah_brief(db->get_surah(r->ayah.surah_number), is_en()));
                     say(tr(L"نُسخ بيان السورة", L"Copied the surah heading"));
                 } else {
                     set_clipboard_text(hwnd, db->get_surah(r->ayah.surah_number).name_uthmani);
@@ -4802,6 +4806,9 @@ static int run_self_test() {
     // صفحات طبعة المدينة: البقرة تبدأ من ٢ والناس في ٦٠٤
     SELFTEST_CHECK(app.db->get_surah(2).start_page == 2);
     SELFTEST_CHECK(app.db->get_surah(114).end_page == 604);
+    SELFTEST_CHECK(app.db->get_surah(78).name_arabic == L"النبأ" && app.db->get_surah(34).name_arabic == L"سبأ");
+    SELFTEST_CHECK(build_surah_brief(app.db->get_surah(4)) == L"مدنية • آياتها ١٧٦");
+    SELFTEST_CHECK(build_surah_brief(app.db->get_surah(1), true) == L"Meccan • 7 verses");
 
     AyahInfo kursi;
     SELFTEST_CHECK(app.db->get_ayah(2, 255, kursi));
