@@ -2369,8 +2369,8 @@ public:
         }
         for (size_t i = 0; i < ayahs.size(); ++i) {
             if (i > 0) all += L"\r\n";
-            all += format_ayah_custom(ayahs[i], settings.copy_script, settings.copy_brackets,
-                                      settings.copy_reference, settings.copy_arabic_digits);
+            all += format_ayah_in_surah(ayahs[i], settings.copy_script, settings.copy_brackets,
+                                        settings.copy_reference, settings.copy_arabic_digits);
         }
         set_clipboard_text(hwnd, all);
         say(tr(L"نُسخت سورة " + s.name_arabic + L" كاملةً ببيانها، " + ayahs_ar((int)ayahs.size()),
@@ -4577,6 +4577,16 @@ static int run_self_test() {
         SELFTEST_CHECK(letters_ar(103) == L"١٠٣ أحرف");
         SELFTEST_CHECK(letters_ar(113) == L"١١٣ حرفًا");
         SELFTEST_CHECK(ayahs_ar(286) == L"٢٨٦ آيةً");
+        // نسخ السورة كاملة: رقم الآية وحده بعدها، بلا اسم السورة
+        {
+            AyahInfo sa;
+            SELFTEST_CHECK(app.db->get_ayah(2, 1, sa));
+            const std::wstring t = format_ayah_in_surah(sa, L"uthmani", true, true, true);
+            SELFTEST_CHECK(t.size() > 4 && t.compare(t.size() - 4, 4, L" [\u0661]") == 0);
+            SELFTEST_CHECK(t.find(sa.surah_name) == std::wstring::npos);
+            const std::wstring plain = format_ayah_in_surah(sa, L"uthmani", true, false, true);
+            SELFTEST_CHECK(plain.find(L'[') == std::wstring::npos);
+        }
         // النسخ بعلامات الوقف أو بدونها: الحروف والتشكيل كما هي، وتسقط العلامات وحدها
         AyahInfo dhalika;
         SELFTEST_CHECK(app.db->get_ayah(2, 2, dhalika));

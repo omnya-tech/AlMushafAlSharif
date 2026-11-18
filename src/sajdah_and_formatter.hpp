@@ -316,6 +316,21 @@ inline std::wstring format_ayah_custom(
     return body;
 }
 
+// آية داخل نسخ السورة كاملة: اسم السورة مكتوب في أول النص، فيكفي بعد الآية رقمها
+inline std::wstring format_ayah_in_surah(
+    const AyahInfo& ayah,
+    const std::wstring& script,
+    bool brackets,
+    bool with_number,
+    bool arabic_digits
+) {
+    std::wstring out = format_ayah_custom(ayah, script, brackets, false, arabic_digits);
+    if (with_number) {
+        out += L" [" + (arabic_digits ? to_arabic_digits(ayah.ayah_number) : std::to_wstring(ayah.ayah_number)) + L"]";
+    }
+    return out;
+}
+
 inline std::wstring quarter_label(int rub_number, int hizb_number, bool en = false) {
     int pos = (rub_number - 1) % 4;
     if (en) {
