@@ -5,6 +5,8 @@
 #include "a11y_and_config.hpp"
 #include "database.hpp"
 #include "sajdah_and_formatter.hpp"
+#include <cmath>
+#include <map>
 #include "shortcuts.hpp"
 #include "dialogs.hpp"
 #include <commctrl.h>
@@ -37,8 +39,9 @@ constexpr int kInlineBtnWidth = 72;
 // هامشا الصفحة يمينًا ويسارًا، كحواشي المصحف الورقي: فيهما علامات الأرباع والأحزاب والأجزاء والسجدات،
 // في الهامش الخارجي للصفحة (الأيمن للصفحة الفردية، والأيسر للزوجية). يُلغيان إن ضاقت القائمة عنهما
 constexpr int kPageMarginWidth = 76;
+constexpr int kMarkFrameGap = 20;      // المسافة بين زخرفة الهامش وإطار الصفحة
 constexpr int kPageMinWidth = 380;      // أقل عرض لصفحة المصحف بين عمودي العلامات
-constexpr int kMinWindowWidth = 740;    // أصغر عرض للنافذة: يتسع للصفحة وإطارها وعلامات الهامش والسهمين
+constexpr int kMinWindowWidth = 768;    // أصغر عرض للنافذة: يتسع للصفحة وإطارها وعلامات الهامش والسهمين
 constexpr int kHeaderInsetX   = 28;
 constexpr int kHeaderInsetY   = 8;
 constexpr int kToolbarHeight  = 52;
@@ -164,10 +167,12 @@ struct AyahListItemData {
 // إجراء قائمة الآيات الأصلي (قبل الاستبدال) — يُستخدم لإكمال حركة الأسهم فوق الصفوف التكميلية
 static WNDPROC g_orig_ayah_list_proc = nullptr;
 
+// أشكال زخارف الحواشي: قبة بخيط من أعلاها، وشمسة بقبتين وخيطين، وشمسة صغيرة بلا خيط
+enum class MarginShape { Arch, Medallion, Small };
 static int margin_mark_height(HDC hdc, int width, const std::vector<std::wstring>& lines, HFONT font,
-                              std::vector<int>* heights = nullptr);
+                              MarginShape shape, std::vector<int>* heights = nullptr);
 static void draw_margin_mark(HDC hdc, const RECT& box, const std::vector<std::wstring>& lines,
-                             const ThemePalette& pal, HFONT font);
+                             const ThemePalette& pal, HFONT font, MarginShape shape);
 
 // ------------------------------------------------------------------
 // أسماء اختصارات البرنامج تتبع لغته. الاختصارات في مجلدات كل المستخدمين، فتغييرها يحتاج إذن المسؤول:
@@ -1103,14 +1108,16 @@ public:
         }
 
         bool is_rub = (a.rub_el_hizb_number >= 2 && db->rub_start_ids().count(a.id) > 0);
-        if (is_rub && text.find(L"۞") != 0) {
+        const bool edition_details = db->edition_has_details();
+        // في طبعتي المدينة لا يوضع ۞ قبل أول آية في السورة، وتكفي علامة الهامش
+        if (is_rub && (edition_details || a.ayah_number != 1) && text.find(L"۞") != 0) {
             text = L"۞ " + text;
         }
 
-        const SajdahPlace* sp = find_sajdah_place(a.verse_key);
+        const SajdahPlace* sp = print_sajdah_place(a.verse_key, edition_details);
         if (sp) {
             if (text.find(L"۩") == std::wstring::npos) text += L" ۩";
-            if (marks_inline() && (!sp->is_agreed() || a.verse_key == L"41:37" || a.verse_key == L"41:38")) {
+            if (marks_inline() && edition_details && (!sp->is_agreed() || a.verse_key == L"41:37" || a.verse_key == L"41:38")) {
                 std::wstring lbl = sajdah_short_label(a.verse_key, is_en());
                 text += L"  [" + (is_kfgqpc ? to_western_digits(lbl) : lbl) + L"]";
             }
@@ -1163,7 +1170,8 @@ public:
             is_en(),
             lcnt,
             settings.sr_speak_waqf,
-            settings.sr_speak_marks
+            settings.sr_speak_marks,
+            db->edition_has_details()
         );
     }
 
@@ -1187,7 +1195,7 @@ public:
 
     // علامات الآيات الظاهرة في عمودي الهامش خارج الإطار، كل نوع في موضعه من حواشي مصحف المدينة:
     // الحزب والجزء والسكتة وسطها على سطرها، والربع وأخواه والسجدة أسفلها عند سطرها،
-    // والسجدة التي يليها ربع أو حزب ختم واحد وسطه بين الآيتين
+    // والسجدة التي يليها ربع أو حزب زخرفة واحدة وسطها بين الآيتين
     void paint_outside_marks(HDC hdc) const {
         if (!marks_outside || !list_ayahs || showing_units || !IsWindowVisible(list_ayahs)) return;
         DWORD old_layout = SetLayout(hdc, 0);
@@ -1215,22 +1223,24 @@ public:
             bool right = false;
             int anchor = 0;
             bool anchor_is_bottom = false;
+            MarginShape shape = MarginShape::Small;
             std::vector<std::wstring> lines;
             int top = 0, height = 0;
         };
         std::vector<Card> cards;
-        auto add_card = [&](const AyahInfo& ayah, int anchor, bool anchor_is_bottom, std::vector<std::wstring> lines) {
+        auto add_card = [&](const AyahInfo& ayah, int anchor, bool anchor_is_bottom, MarginShape shape, std::vector<std::wstring> lines) {
             Card c;
             // الصفحة الفردية على اليمين المرئي، والزوجية على اليسار، كالمصحف المفتوح
             c.right = (ayah.page_number % 2) == 1;
             c.anchor = anchor;
             c.anchor_is_bottom = anchor_is_bottom;
+            c.shape = shape;
             c.lines = std::move(lines);
             cards.push_back(std::move(c));
         };
 
         const int count = (int)ayah_items.size();
-        int merged_id = 0;   // آية بدأ ربعها في ختم السجدة التي قبلها
+        int merged_id = 0;   // آية بدأ ربعها في زخرفة السجدة التي قبلها
         for (int i = (int)SendMessageW(list_ayahs, LB_GETTOPINDEX, 0, 0); i >= 0 && i < count; ++i) {
             RECT ir{};
             if (SendMessageW(list_ayahs, LB_GETITEMRECT, i, (LPARAM)&ir) == LB_ERR || ir.top >= lr.bottom) break;
@@ -1253,16 +1263,17 @@ public:
                 if (!division.empty()) {
                     const bool quarter = (ayah.rub_el_hizb_number - 1) % 4 != 0;
                     division.insert(division.end(), personal.begin(), personal.end());
-                    add_card(ayah, quarter ? y0 + lh : y0 + lh / 2, quarter, std::move(division));
+                    add_card(ayah, quarter ? y0 + lh : y0 + lh / 2, quarter,
+                             quarter ? MarginShape::Arch : MarginShape::Medallion, std::move(division));
                 } else if (!personal.empty()) {
-                    add_card(ayah, y0 + lh / 2, false, std::move(personal));
+                    add_card(ayah, y0 + lh / 2, false, MarginShape::Small, std::move(personal));
                 }
             }
 
             if (const SaktaPlace* sk = find_sakta_place(ayah.verse_key)) {
                 for (int k = 0; k < n; ++k) {
                     if (line_visible(k) && line_has_arabic_word(it.lines[k], sk->word)) {
-                        add_card(ayah, y0 + k * lh + lh / 2, false,
+                        add_card(ayah, y0 + k * lh + lh / 2, false, MarginShape::Small,
                                  {tr(L"سكتة لطيفة", L"Slight pause"), is_en() ? sk->where_en : sk->where_ar});
                         break;
                     }
@@ -1280,9 +1291,9 @@ public:
                     if (!next_division.empty()) {
                         merged_id = ayah.id + 1;
                         sajdah.insert(sajdah.end(), next_division.begin(), next_division.end());
-                        add_card(ayah, list_top + ir.bottom, false, std::move(sajdah));
+                        add_card(ayah, list_top + ir.bottom, false, MarginShape::Medallion, std::move(sajdah));
                     } else {
-                        add_card(ayah, y0 + n * lh, true, std::move(sajdah));
+                        add_card(ayah, y0 + n * lh, true, MarginShape::Arch, std::move(sajdah));
                     }
                 }
             }
@@ -1297,12 +1308,12 @@ public:
             std::vector<Card*> column;
             for (auto& c : cards) {
                 if (c.right != (side == 1)) continue;
-                c.height = margin_mark_height(hdc, width, c.lines, font_margin);
+                c.height = margin_mark_height(hdc, width, c.lines, font_margin, c.shape);
                 c.top = c.anchor_is_bottom ? c.anchor - c.height : c.anchor - c.height / 2;
                 column.push_back(&c);
             }
             std::stable_sort(column.begin(), column.end(), [](const Card* x, const Card* y) { return x->top < y->top; });
-            // لا يغطي ختم ختمًا، ويبقى كل ختم كاملًا داخل حدود الصفحة
+            // لا تغطي زخرفة زخرفة، وتبقى كل واحدة كاملة داخل حدود الصفحة
             int floor_y = list_top + inset;
             for (Card* c : column) {
                 c->top = std::max(c->top, floor_y);
@@ -1316,7 +1327,7 @@ public:
             for (Card* c : column) {
                 const RECT box = {col.left, std::max(c->top, list_top + inset), col.right,
                                   std::max(c->top, list_top + inset) + c->height};
-                draw_margin_mark(hdc, box, c->lines, pal, font_margin);
+                draw_margin_mark(hdc, box, c->lines, pal, font_margin, c->shape);
             }
         }
         RestoreDC(hdc, saved);
@@ -1349,6 +1360,11 @@ public:
     std::vector<std::wstring> margin_sajdah_lines(const AyahInfo& a) const {
         std::vector<std::wstring> out;
         const bool en = is_en();
+        // طبعتا المدينة تكتبان في الحاشية «سجدة» وحدها
+        if (!db->edition_has_details()) {
+            if (print_sajdah_place(a.verse_key, false)) out.push_back(tr(L"سجدة", L"Sajdah"));
+            return out;
+        }
         if (const SajdahPlace* sp = find_sajdah_place(a.verse_key)) {
             out.push_back(tr(L"۩ سجدة", L"۩ Sajdah"));
             if (a.verse_key == L"41:37") out.push_back(tr(L"عند المالكية", L"Maliki"));
@@ -1846,7 +1862,9 @@ public:
                 AyahListItemData hdr;
                 hdr.kind = ListItemKind::SurahHeader;
                 hdr.ayah = a;
-                if (a.ayah_number == 1) {
+                const bool edition_details = db->edition_has_details();
+                // طبعتا المدينة تكتبان اسم السورة وحده في إطارها
+                if (a.ayah_number == 1 || !edition_details) {
                     hdr.visual_text = s.name_uthmani;   // «سُورَةُ ...» داخل إطار مزخرف
                     hdr.spoken_text = is_en() ? (L"Surah " + s_name) : (L"سورة " + s_name);
                 } else {
@@ -1859,7 +1877,7 @@ public:
                 }
                 add_ayah_list_row(hdc, hdr);
 
-                if (a.ayah_number == 1) {
+                if (a.ayah_number == 1 && edition_details) {
                     AyahListItemData det;
                     det.kind = ListItemKind::SurahDetails;
                     det.ayah = a;
@@ -2478,7 +2496,8 @@ public:
     void copy_whole_surah(int surah_num) {
         auto ayahs = db->get_surah_ayahs(surah_num);
         SurahInfo s = db->get_surah(surah_num);
-        std::wstring all = s.name_uthmani + L"\r\n" + build_surah_heading(*db, surah_num, is_en()) + L"\r\n";
+        std::wstring all = s.name_uthmani + L"\r\n";
+        if (db->edition_has_details()) all += build_surah_heading(*db, surah_num, is_en()) + L"\r\n";
         AyahInfo first;
         if (s.bismillah_pre && db->get_ayah(1, 1, first)) {
             all += format_ayah_custom(first, settings.copy_script, false, false, settings.copy_arabic_digits) + L"\r\n";
@@ -2524,8 +2543,13 @@ public:
         // على عنوان السورة أو بيانها يُنسخ بيان السورة، وعلى البسملة تُنسخ البسملة
         if (const AyahListItemData* r = current_row()) {
             if (r->kind == ListItemKind::SurahHeader || r->kind == ListItemKind::SurahDetails) {
-                set_clipboard_text(hwnd, build_surah_heading(*db, r->ayah.surah_number, is_en()));
-                say(tr(L"نُسخ بيان السورة", L"Copied the surah heading"));
+                if (db->edition_has_details()) {
+                    set_clipboard_text(hwnd, build_surah_heading(*db, r->ayah.surah_number, is_en()));
+                    say(tr(L"نُسخ بيان السورة", L"Copied the surah heading"));
+                } else {
+                    set_clipboard_text(hwnd, db->get_surah(r->ayah.surah_number).name_uthmani);
+                    say(tr(L"نُسخ اسم السورة", L"Copied the surah name"));
+                }
                 return;
             }
             if (r->kind == ListItemKind::Basmala) {
@@ -2852,7 +2876,7 @@ public:
         invalidate_nav_arrows();
         // من الخارج إلى الداخل: السهم عند حافة النافذة، ثم عمود العلامات، ثم الإطار، ثم الصفحة.
         // إن ضاق المكان (شاشة أصغر من أقل عرض للنافذة) يتنازل السهمان أولًا، ثم يضيق عمود العلامات
-        const int arrow_d = DS(kArrowDiameter), gap = DS(6), frame_out = frame_on ? DS(16) : DS(4);
+        const int arrow_d = DS(kArrowDiameter), gap = DS(kMarkFrameGap), frame_out = frame_on ? DS(16) : DS(4);
         const int lx = sb_vis ? (main_x + DS(2)) : DS(kArrowEdge);
         const int rx = width - DS(kArrowEdge) - arrow_d;
         int col_w = DS(kPageMarginWidth);
@@ -3054,11 +3078,25 @@ static RECT inline_copy_button_rect(const RECT& item_rc, bool rtl_layout) {
     return r;
 }
 
-// ارتفاع الختم بعرض عمود الهامش، وارتفاع كل سطر فيه
+// مقاسات الزخرفة بالنسبة إلى عرضها
+struct MarginShapeMetrics { int stem, cap, top, bottom, side; };
+static MarginShapeMetrics margin_shape_metrics(int w, MarginShape shape) {
+    MarginShapeMetrics m{};
+    m.stem = (shape == MarginShape::Small) ? 0 : w * 20 / 100;
+    m.cap = (shape == MarginShape::Small) ? w * 30 / 100 : w * 40 / 100;
+    m.side = w * 13 / 100;
+    // لوحة النص تبدأ بعد الكتفين وحاشيتها، فلا يلامس النص إطارها
+    m.top = m.stem + m.cap + w * 16 / 100;
+    m.bottom = (shape == MarginShape::Arch) ? w * 14 / 100 : m.top;
+    return m;
+}
+
+// ارتفاع الزخرفة بعرض عمود الهامش، وارتفاع كل سطر فيها
 static int margin_mark_height(HDC hdc, int width, const std::vector<std::wstring>& lines, HFONT font,
-                              std::vector<int>* heights) {
+                              MarginShape shape, std::vector<int>* heights) {
+    const MarginShapeMetrics m = margin_shape_metrics(width, shape);
     HGDIOBJ old_f = SelectObject(hdc, font);
-    const int text_w = width - DS(8);
+    const int text_w = std::max(10, width - 2 * m.side);
     int text_h = 0;
     for (const auto& ln : lines) {
         RECT c = {0, 0, text_w, 0};
@@ -3067,44 +3105,155 @@ static int margin_mark_height(HDC hdc, int width, const std::vector<std::wstring
         text_h += c.bottom - c.top;
     }
     SelectObject(hdc, old_f);
-    return text_h + 2 * DS(5);
+    return text_h + 2 * DS(4) + m.top + m.bottom;
 }
 
-// ختم صغير مذهّب في هامش الصفحة، كعلامات الأحزاب والأجزاء على حواشي المصحف الورقي
-static void draw_margin_mark(HDC hdc, const RECT& box, const std::vector<std::wstring>& lines,
-                             const ThemePalette& pal, HFONT font) {
-    std::vector<int> heights;
-    margin_mark_height(hdc, box.right - box.left, lines, font, &heights);
-    HGDIOBJ old_f = SelectObject(hdc, font);
-    const int pad = DS(5);
+// ترسم الزخرفة مكبّرة أربع مرات ثم تُصغَّر فتنعم حوافها، وتُحفظ لتكرارها دون إعادة رسم
+static HBITMAP margin_ornament_bitmap(HDC ref, int w, int h, MarginShape shape, COLORREF bg) {
+    static std::map<unsigned long long, HBITMAP> cache;
+    const unsigned long long key = ((unsigned long long)bg << 32) | ((unsigned long long)(w & 0x3FFF) << 18) |
+                                   ((unsigned long long)(h & 0x3FFF) << 4) | (unsigned long long)shape;
+    auto found = cache.find(key);
+    if (found != cache.end()) return found->second;
 
-    // إطار مذهّب مزدوج بزوايا مستديرة، وزخرفة صغيرة أعلاه وأسفله
-    HBRUSH fill = CreateSolidBrush(pal.paper_bg);
-    HPEN gold = CreatePen(PS_SOLID, std::max(1, DS(1)), pal.selected_border);
-    HGDIOBJ old_b = SelectObject(hdc, fill);
-    HGDIOBJ old_p = SelectObject(hdc, gold);
-    const int r = DS(10);
-    RoundRect(hdc, box.left, box.top, box.right, box.bottom, r, r);
-    SelectObject(hdc, GetStockObject(NULL_BRUSH));
-    RoundRect(hdc, box.left + DS(3), box.top + DS(3), box.right - DS(3), box.bottom - DS(3), r - DS(3), r - DS(3));
-    HBRUSH gold_br = CreateSolidBrush(pal.selected_border);
-    SelectObject(hdc, gold_br);
-    const int cx = (box.left + box.right) / 2, d = DS(3);
-    for (int y : {(int)box.top, (int)box.bottom}) {
-        POINT dia[4] = {{cx, y - d}, {cx + d, y}, {cx, y + d}, {cx - d, y}};
-        Polygon(hdc, dia, 4);
+    const int ss = 4, W = w * ss, H = h * ss;
+    const MarginShapeMetrics mm = margin_shape_metrics(w, shape);
+    const int stem = mm.stem * ss, cap = mm.cap * ss, cx = W / 2;
+    const bool both_ends = shape != MarginShape::Arch;
+    const COLORREF sage = RGB(166, 186, 164), sage_dark = RGB(84, 108, 88), white = RGB(252, 253, 250),
+                   panel = RGB(226, 234, 224), green = RGB(46, 134, 66), green_dark = RGB(24, 84, 42),
+                   pink = RGB(232, 84, 168);
+
+    HDC dc = CreateCompatibleDC(ref);
+    HBITMAP big = CreateCompatibleBitmap(ref, W, H);
+    HGDIOBJ old_big = SelectObject(dc, big);
+    RECT all = {0, 0, W, H};
+    HBRUSH bg_br = CreateSolidBrush(bg);
+    FillRect(dc, &all, bg_br);
+    DeleteObject(bg_br);
+
+    auto poly = [&](const std::vector<POINT>& p, COLORREF fill, COLORREF line, int pen_w) {
+        HBRUSH b = CreateSolidBrush(fill);
+        HPEN n = CreatePen(PS_SOLID, pen_w, line);
+        HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, n);
+        Polygon(dc, p.data(), (int)p.size());
+        SelectObject(dc, ob); SelectObject(dc, op);
+        DeleteObject(b); DeleteObject(n);
+    };
+    // حدود الزخرفة بعد إنقاصها من كل جهة: كتفان، ثم قبة مدببة، ثم مثلها أسفل الشمسة
+    auto outline = [&](int inset) {
+        const int step = W * 9 / 100, shoulder = stem + cap + inset, peak = stem + inset * 3 / 2;
+        const int sx = inset + step;
+        std::vector<POINT> top;
+        top.push_back({inset, shoulder});
+        top.push_back({sx, shoulder});
+        const int n = 16;
+        for (int i = 1; i < n; ++i) {
+            const double t = (double)i / n;
+            const double f = (1 - (1 - t) * (1 - t)) * 0.55 + t * t * t * t * 0.45;
+            top.push_back({sx + (LONG)((cx - sx) * t), shoulder + (LONG)((peak - shoulder) * f)});
+        }
+        top.push_back({cx, peak});
+        for (int i = (int)top.size() - 2; i >= 0; --i) top.push_back({W - top[i].x, top[i].y});
+        std::vector<POINT> all_pts = top;
+        if (both_ends) {
+            for (int i = (int)top.size() - 1; i >= 0; --i) all_pts.push_back({top[i].x, H - top[i].y});
+        } else {
+            all_pts.push_back({W - inset, H - inset});
+            all_pts.push_back({inset, H - inset});
+        }
+        return all_pts;
+    };
+    auto leaf = [&](double x0, double y0, double x1, double y1, double half) {
+        const double dx = x1 - x0, dy = y1 - y0, len = std::max(1.0, std::sqrt(dx * dx + dy * dy));
+        const double nx = -dy / len, ny = dx / len;
+        std::vector<POINT> p;
+        const int n = 12;
+        for (int side = 1; side >= -1; side -= 2) {
+            for (int i = 0; i <= n; ++i) {
+                const double t = (side == 1) ? (double)i / n : 1.0 - (double)i / n;
+                const double b = std::sin(3.14159265 * std::pow(t, 0.72)) * half * side;
+                p.push_back({(LONG)(x0 + dx * t + nx * b), (LONG)(y0 + dy * t + ny * b)});
+            }
+        }
+        poly(p, green, green_dark, std::max(1, ss / 2));
+    };
+    // زخرفة القبة: ورقة وسطى وورقتان جانبيتان وقاعدة وردية؛ dir = 1 للأعلى و-1 للأسفل
+    auto crown = [&](int dir) {
+        const double base = (dir > 0) ? stem + cap + W * 0.03 : H - stem - cap - W * 0.03;
+        const double r = W * 0.075, tip = cap * 0.70, spread = W * 0.25;
+        leaf(cx, base, cx, base - dir * tip, W * 0.075);
+        leaf(cx, base, cx - spread, base - dir * cap * 0.32, W * 0.055);
+        leaf(cx, base, cx + spread, base - dir * cap * 0.32, W * 0.055);
+        HBRUSH b = CreateSolidBrush(pink);
+        HPEN n = CreatePen(PS_SOLID, std::max(1, ss / 2), green_dark);
+        HGDIOBJ ob = SelectObject(dc, b), op = SelectObject(dc, n);
+        Ellipse(dc, (int)(cx - r), (int)(base - r), (int)(cx + r), (int)(base + r));
+        SelectObject(dc, ob); SelectObject(dc, op);
+        DeleteObject(b); DeleteObject(n);
+    };
+    auto stem_line = [&](int y0, int y1) {
+        HPEN n = CreatePen(PS_SOLID, std::max(2, ss * 3 / 4), sage_dark);
+        HGDIOBJ op = SelectObject(dc, n);
+        MoveToEx(dc, cx, y0, nullptr);
+        LineTo(dc, cx, y1);
+        SelectObject(dc, op);
+        DeleteObject(n);
+        const int my = (y0 + y1) / 2, d = W * 3 / 100;
+        poly({{cx, my - d}, {cx + d, my}, {cx, my + d}, {cx - d, my}}, sage_dark, sage_dark, 1);
+    };
+
+    if (stem > 0) {
+        stem_line(0, stem + W / 50);
+        if (both_ends) stem_line(H - stem - W / 50, H);
     }
-    SelectObject(hdc, old_b);
-    SelectObject(hdc, old_p);
-    DeleteObject(gold_br);
-    DeleteObject(gold);
-    DeleteObject(fill);
+    const int i1 = W * 4 / 100, i2 = W * 7 / 100, i3 = W * 10 / 100;
+    poly(outline(0), sage, sage_dark, ss);
+    poly(outline(i1), white, sage_dark, std::max(1, ss / 2));
+    crown(1);
+    if (both_ends) crown(-1);
+    // لوحة النص
+    const int panel_top = stem + cap + i2 + W * 6 / 100;
+    const int panel_bottom = both_ends ? H - panel_top : H - i3;
+    poly({{i2, panel_top}, {W - i2, panel_top}, {W - i2, panel_bottom}, {i2, panel_bottom}}, sage, sage_dark, std::max(1, ss / 2));
+    poly({{i3, panel_top + i3 - i2}, {W - i3, panel_top + i3 - i2}, {W - i3, panel_bottom - (i3 - i2)}, {i3, panel_bottom - (i3 - i2)}},
+         panel, sage_dark, std::max(1, ss / 2));
 
+    HDC out_dc = CreateCompatibleDC(ref);
+    HBITMAP out = CreateCompatibleBitmap(ref, w, h);
+    HGDIOBJ old_out = SelectObject(out_dc, out);
+    SetStretchBltMode(out_dc, HALFTONE);
+    SetBrushOrgEx(out_dc, 0, 0, nullptr);
+    StretchBlt(out_dc, 0, 0, w, h, dc, 0, 0, W, H, SRCCOPY);
+    SelectObject(out_dc, old_out);
+    DeleteDC(out_dc);
+    SelectObject(dc, old_big);
+    DeleteObject(big);
+    DeleteDC(dc);
+    cache[key] = out;
+    return out;
+}
+
+// زخرفة في هامش الصفحة على طراز حواشي المصحف الورقي، وفيها نص العلامة
+static void draw_margin_mark(HDC hdc, const RECT& box, const std::vector<std::wstring>& lines,
+                             const ThemePalette& pal, HFONT font, MarginShape shape) {
+    const int w = box.right - box.left, h = box.bottom - box.top;
+    const MarginShapeMetrics m = margin_shape_metrics(w, shape);
+    std::vector<int> heights;
+    margin_mark_height(hdc, w, lines, font, shape, &heights);
+    if (HBITMAP bmp = margin_ornament_bitmap(hdc, w, h, shape, pal.window_bg)) {
+        HDC mem = CreateCompatibleDC(hdc);
+        HGDIOBJ old = SelectObject(mem, bmp);
+        BitBlt(hdc, box.left, box.top, w, h, mem, 0, 0, SRCCOPY);
+        SelectObject(mem, old);
+        DeleteDC(mem);
+    }
+    HGDIOBJ old_f = SelectObject(hdc, font);
     SetBkMode(hdc, TRANSPARENT);
-    SetTextColor(hdc, pal.text_header);
-    int y = box.top + pad;
+    SetTextColor(hdc, RGB(24, 48, 34));
+    int y = box.top + m.top + DS(4);
     for (size_t i = 0; i < lines.size(); ++i) {
-        RECT lr = {box.left + DS(4), y, box.right - DS(4), y + heights[i]};
+        RECT lr = {box.left + m.side, y, box.right - m.side, y + heights[i]};
         DrawTextW(hdc, lines[i].c_str(), (int)lines[i].size(), &lr, DT_WORDBREAK | DT_CENTER | DT_NOPREFIX | dt_reading_flag(hdc, true));
         y += heights[i];
     }
@@ -3363,6 +3512,7 @@ static std::vector<std::wstring> build_surah_info_lines(int target_surah_num) {
             int min_juz = 99, max_juz = 0, min_ruku = 9999, max_ruku = 0;
             int longest_ayah = 0, longest_letters = -1;
             int shortest_ayah = 0, shortest_letters = 999999;
+            const bool edition_details = g_app->db->edition_has_details();
             std::vector<const std::wstring*> surah_texts;
             for (const auto& ay : s_ayahs) surah_texts.push_back(&ay.text_simple);
             const std::wstring surah_letter_freq = letter_frequency_text(surah_texts);
@@ -3371,7 +3521,7 @@ static std::vector<std::wstring> build_surah_info_lines(int target_surah_num) {
                 max_juz = std::max(max_juz, ay.juz_number);
                 min_ruku = std::min(min_ruku, ay.ruku_number);
                 max_ruku = std::max(max_ruku, ay.ruku_number);
-                if (find_sajdah_place(ay.verse_key)) ++sajdahs;
+                if (print_sajdah_place(ay.verse_key, edition_details)) ++sajdahs;
 
                 int ay_letters = count_arabic_letters(ay.text_simple);
                 if (ay_letters > longest_letters) { longest_letters = ay_letters; longest_ayah = ay.ayah_number; }
@@ -3420,8 +3570,10 @@ static std::vector<std::wstring> build_surah_info_lines(int target_surah_num) {
                 lines.push_back(L"Surah: " + s.name_arabic);
                 lines.push_back(L"Order in the Mushaf: surah " + std::to_wstring(s.number) + L" of 114");
                 lines.push_back(L"Order of revelation: " + std::to_wstring(s.revelation_order));
-                lines.push_back(L"Place of revelation: " + std::wstring((sh.type.empty() ? s.revelation_place : sh.type) == L"مكية" ? L"Meccan" : L"Medinan"));
-                if (!sh.excepted_verses.empty()) {
+                lines.push_back(L"Place of revelation: " + std::wstring((sh.type.empty() || !edition_details ? s.revelation_place : sh.type) == L"مكية" ? L"Meccan" : L"Medinan"));
+                if (!edition_details) {
+                    // بيان الاستثناء من خصائص طبعة دار المعارف
+                } else if (!sh.excepted_verses.empty()) {
                     std::wstring exc_txt = L"Excepted ayahs: " + sh.excepted_verses_en;
                     if (!sh.place_note_en.empty()) exc_txt += L" (" + sh.place_note_en + L")";
                     lines.push_back(exc_txt);
@@ -3440,13 +3592,15 @@ static std::vector<std::wstring> build_surah_info_lines(int target_surah_num) {
                     lines.push_back(L"Longest ayah: ayah " + std::to_wstring(longest_ayah) + L" (" + std::to_wstring(longest_letters) + L" letters) • Shortest ayah: ayah " + std::to_wstring(shortest_ayah) + L" (" + std::to_wstring(shortest_letters) + L" letters)");
                 }
                 lines.push_back(L"The name of Allah (الله) occurs: " + std::to_wstring(total_allah) + ((total_allah) == 1 ? L" time" : L" times") + L" • Sajdah places: " + std::to_wstring(sajdahs));
-                lines.push_back(L"Surah summary: " + build_surah_heading(*g_app->db, s.number, true));
+                if (edition_details) lines.push_back(L"Surah summary: " + build_surah_heading(*g_app->db, s.number, true));
             } else {
                 lines.push_back(L"اسم السورة: سورة " + s.name_arabic);
                 lines.push_back(L"ترتيبها في المصحف: السورة رقم " + std::to_wstring(s.number) + L" من 114");
                 lines.push_back(L"ترتيب نزولها: " + std::to_wstring(s.revelation_order));
-                lines.push_back(L"مكان النزول: " + (sh.type.empty() ? s.revelation_place : sh.type));
-                if (!sh.excepted_verses.empty()) {
+                lines.push_back(L"مكان النزول: " + (sh.type.empty() || !edition_details ? s.revelation_place : sh.type));
+                if (!edition_details) {
+                    // بيان الاستثناء من خصائص طبعة دار المعارف
+                } else if (!sh.excepted_verses.empty()) {
                     bool multi_exc = (sh.excepted_verses.find(L'،') != std::wstring::npos || sh.excepted_verses.find(L'-') != std::wstring::npos);
                     std::wstring exc_txt = std::wstring(multi_exc ? L"الآيات المستثناة: الآيات " : L"الآيات المستثناة: الآية ") + to_arabic_digits(sh.excepted_verses);
                     if (!sh.place_note.empty()) exc_txt += L" (" + to_arabic_digits(sh.place_note) + L")";
@@ -3467,7 +3621,7 @@ static std::vector<std::wstring> build_surah_info_lines(int target_surah_num) {
                 }
                 lines.push_back(L"ورود لفظ الجلالة «الله»: " + (total_allah ? times_ar(total_allah) : std::wstring(L"لم يرد في السورة")) +
                                 L" • مواضع السجود: " + (sajdahs ? std::to_wstring(sajdahs) : std::wstring(L"لا توجد")));
-                lines.push_back(L"بيان السورة: " + build_surah_heading(*g_app->db, s.number, false));
+                if (edition_details) lines.push_back(L"بيان السورة: " + build_surah_heading(*g_app->db, s.number, false));
             }
             if (!g_app->is_en()) for (auto& l : lines) l = to_arabic_digits(l);
             return lines;
@@ -4261,7 +4415,8 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 }
                 return false;
             };
-            bool ay_excepted = is_ayah_excepted(a->ayah_number, sh.excepted_verses);
+            const bool edition_details = g_app->db->edition_has_details();
+            bool ay_excepted = edition_details && is_ayah_excepted(a->ayah_number, sh.excepted_verses);
 
             if (g_app->is_en()) {
                 lines.push_back(L"﴿ " + a->text_uthmani + L" ﴾");
@@ -4328,8 +4483,12 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 lines.push_back(L"الركوع: " + std::to_wstring(a->ruku_number) + L" من 558");
                 lines.push_back(L"التحزيب السباعي: المنزلة " + std::to_wstring(a->manzil_number) + L" من 7 (" + manzil_day_label(a->manzil_number, false) + L")");
             }
-            if (const SajdahPlace* sp = find_sajdah_place(a->verse_key)) {
-                lines.push_back(g_app->is_en() ? (L"Sajdah: " + std::wstring(sp->note_en)) : (L"بيان السجدة: " + std::wstring(sp->note_ar)));
+            if (const SajdahPlace* sp = print_sajdah_place(a->verse_key, edition_details)) {
+                if (edition_details) {
+                    lines.push_back(g_app->is_en() ? (L"Sajdah: " + std::wstring(sp->note_en)) : (L"بيان السجدة: " + std::wstring(sp->note_ar)));
+                } else {
+                    lines.push_back(g_app->tr(L"السجدة: موضع سجدة تلاوة", L"Sajdah: place of a prostration of recitation"));
+                }
             }
             // في الواجهة العربية تُكتب الأرقام كلها بالأرقام العربية المشرقية، كسائر البرنامج
             if (!g_app->is_en()) for (auto& l : lines) l = to_arabic_digits(l);
@@ -4559,8 +4718,8 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 hifz_txt,
                 L"Al-Mushaf Al-Sharif — Version 1.0.0",
                 L"The Noble Quran in the narration of Hafs from 'Asim, in the Uthmani script. "
-                L"Its pages can be browsed as laid out in two prints: the King Fahd Complex for the Printing of the "
-                L"Holy Quran in Madinah, and Dar al-Maarif in Egypt.",
+                L"Its pages can be browsed as laid out in three prints: the new and classic prints of the King Fahd "
+                L"Complex for the Printing of the Holy Quran in Madinah, and the Dar al-Maarif print in Egypt.",
                 L"Built to be a calm companion for reciting, reviewing and reflecting on the Book of Allah, "
                 L"with nothing to draw the heart away from its verses.",
                 L"Developed by the Omnya Technology team and offered, seeking only the pleasure of Allah, "
@@ -4571,8 +4730,8 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 hifz_txt,
                 L"المصحف الشريف — الإصدار 1.0.0",
                 L"القرآن الكريم برواية حفص عن عاصم، بالرسم العثماني، "
-                L"ويُتصفَّح بصفحات طبعتين: طبعة مجمع الملك فهد لطباعة المصحف الشريف بالمدينة المنورة، "
-                L"وطبعة دار المعارف بمصر.",
+                L"ويُتصفَّح بصفحات ثلاث طبعات: طبعتي مجمع الملك فهد لطباعة المصحف الشريف بالمدينة المنورة "
+                L"الحديثة والقديمة، وطبعة دار المعارف بمصر.",
                 L"صُمِّم ليكون رفيقًا هادئًا لتلاوة كتاب الله ومراجعته وتدبّره، "
                 L"خاليًا مما يشغل القلب عن آياته.",
                 L"طوّره فريق (Omnya Technology)، وقدّمه هديةً خالصةً لوجه الله تعالى "
@@ -4949,7 +5108,39 @@ static int run_self_test() {
             AyahInfo d1;
             SELFTEST_CHECK(app.db->get_ayah(3, 3, d1) && d1.page_number == 38);
             SELFTEST_CHECK(app.db->get_ayah(114, 6, d1) && d1.page_number == 485);
+            // تفاصيل دار المعارف: سجدة المالكية في فصلت ٣٧ وبيان السورة
+            AyahInfo f37, f38;
+            SELFTEST_CHECK(app.db->get_ayah(41, 37, f37) && app.db->get_ayah(41, 38, f38));
+            SELFTEST_CHECK(app.db->edition_has_details());
+            SELFTEST_CHECK(app.format_visual_ayah(f37).find(L"۩") != std::wstring::npos);
+            SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"المالكية") != std::wstring::npos);
+
+            // طبعة المدينة القديمة: ترتيبها الأول، ومطابقة للمصحف بلا تفاصيل المذاهب
+            SELFTEST_CHECK(app.db->editions().size() >= 3 && app.db->editions()[1].key == L"madinah_1405");
+            SELFTEST_CHECK(app.db->set_edition(L"madinah_1405") == L"madinah_1405");
+            SELFTEST_CHECK(app.db->page_count() == 604 && !app.db->edition_has_details());
+            AyahInfo m1;
+            SELFTEST_CHECK(app.db->get_ayah(5, 77, m1) && m1.page_number == 121);
+            SELFTEST_CHECK(app.db->get_ayah(96, 19, m1) && m1.page_number == 597);
+            SELFTEST_CHECK(app.db->get_ayah(100, 9, m1) && m1.page_number == 599);
+            SELFTEST_CHECK(app.format_visual_ayah(f37).find(L"۩") == std::wstring::npos);
+
+            // طبعة المدينة الحديثة
             SELFTEST_CHECK(app.db->set_edition(L"madinah") == L"madinah");
+            SELFTEST_CHECK(app.db->get_ayah(5, 77, m1) && m1.page_number == 120);
+            SELFTEST_CHECK(app.db->get_ayah(96, 19, m1) && m1.page_number == 598);
+            SELFTEST_CHECK(app.db->get_ayah(100, 9, m1) && m1.page_number == 600);
+            SELFTEST_CHECK(app.format_visual_ayah(f37).find(L"۩") == std::wstring::npos);
+            SELFTEST_CHECK(app.format_visual_ayah(f38).find(L"۩") != std::wstring::npos);
+            SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"المالكية") == std::wstring::npos);
+            SELFTEST_CHECK(app.margin_sajdah_lines(f37).empty());
+            SELFTEST_CHECK(app.margin_sajdah_lines(f38).size() == 1);
+            // الربع الذي يبدأ بأول السورة: علامته في الهامش بلا ۞ في سطر الآية
+            AyahInfo nisa1, baq26;
+            SELFTEST_CHECK(app.db->get_ayah(4, 1, nisa1) && app.db->get_ayah(2, 26, baq26));
+            SELFTEST_CHECK(app.format_visual_ayah(nisa1).find(L"۞") != 0);
+            SELFTEST_CHECK(!app.margin_division_lines(nisa1).empty());
+            SELFTEST_CHECK(app.format_visual_ayah(baq26).find(L"۞") == 0);
         } else {
             SELFTEST_CHECK(false && "dar_almaarif edition did not load");
         }

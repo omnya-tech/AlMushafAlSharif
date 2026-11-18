@@ -59,6 +59,12 @@ inline const SajdahPlace* find_sajdah_place(const std::wstring& verse_key) {
     return nullptr;
 }
 
+// موضع السجدة كما في الطبعة المختارة: طبعتا المدينة فيهما سجدة فصلت عند الآية ٣٨ وحدها
+inline const SajdahPlace* print_sajdah_place(const std::wstring& verse_key, bool edition_details) {
+    if (!edition_details && verse_key == L"41:37") return nullptr;
+    return find_sajdah_place(verse_key);
+}
+
 // مواضع «سكتة لطيفة» المكتوبة في حواشي مصحف المدينة
 struct SaktaPlace {
     const wchar_t* verse_key;
@@ -293,7 +299,8 @@ inline std::wstring build_ayah_accessible_name(
     bool en = false,
     int letter_count = 0,
     bool speak_waqf = false,
-    bool speak_marks = true   // نطق علامات الأجزاء والأحزاب والأرباع والسجدات والسكتات مع الآية
+    bool speak_marks = true,  // نطق علامات الأجزاء والأحزاب والأرباع والسجدات والسكتات مع الآية
+    bool edition_details = true   // أقوال المذاهب في السجدة تُذكر في طبعة دار المعارف وحدها
 ) {
     std::wstring spoken = prepare_ayah_for_screen_reader(ayah, phonetic_norm, spell_muqattaat, speak_waqf);
     std::wstring tail;
@@ -307,7 +314,11 @@ inline std::wstring build_ayah_accessible_name(
                   : (L"الآية " + std::to_wstring(ayah.ayah_number) + L" من سورة " + ayah.surah_name);
     }
 
-    std::wstring sajdah = speak_marks ? sajdah_short_label(ayah.verse_key, en) : L"";
+    std::wstring sajdah;
+    if (speak_marks) {
+        if (edition_details) sajdah = sajdah_short_label(ayah.verse_key, en);
+        else if (print_sajdah_place(ayah.verse_key, false)) sajdah = en ? L"prostration of recitation" : L"سجدة تلاوة";
+    }
     std::wstring div = (speak_marks && is_rub_start) ? division_spoken_text(ayah, en) : L"";
     // إذا كانت علامات الوقف تُنطق فالسكتة مذكورة في موضعها من الآية
     std::wstring sakta;

@@ -142,6 +142,8 @@ public:
 
     // سطور الطبعة الحالية (إن كان لها ملف سطور)، صفحةً صفحة
     bool has_edition_lines() const { return edition_lines_.count(edition_) > 0; }
+    // بيان السور وأقوال المذاهب في السجدات من خصائص طبعة دار المعارف؛ وطبعتا المدينة كما طبعهما المجمع
+    bool edition_has_details() const { return edition_ == L"dar_almaarif"; }
     std::vector<EditionLine> get_page_lines(int page) const;
     // يقرأ ملف السطور ويتحقق أنه يغطي كل كلمات القرآن بترتيبها؛ يعيد رسالة خطأ أو نصاً فارغاً
     std::wstring load_edition_lines(const std::wstring& key, const std::wstring& path);

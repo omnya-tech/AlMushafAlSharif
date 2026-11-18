@@ -68,8 +68,8 @@ QuranDatabase::QuranDatabase(
     page_first_ids_[L"madinah"] = madinah_starts;
     EditionInfo madinah;
     madinah.key = L"madinah";
-    madinah.name_ar = L"طبعة المدينة المنورة";
-    madinah.name_en = L"Madinah print";
+    madinah.name_ar = L"طبعة المدينة الحديثة";
+    madinah.name_en = L"New Madinah print";
     madinah.page_count = (int)madinah_starts.size();
     editions_.push_back(madinah);
 
@@ -384,6 +384,10 @@ int QuranDatabase::load_editions_folder(const std::wstring& folder) {
         }
     } while (FindNextFileW(h, &fd));
     FindClose(h);
+    // طبعتا المدينة متجاورتان في أول القائمة، أيًّا كان ترتيب الملفات في المجلد
+    std::stable_partition(editions_.begin(), editions_.end(), [](const EditionInfo& e) {
+        return e.key.compare(0, 7, L"madinah") == 0;
+    });
     return added;
 }
 

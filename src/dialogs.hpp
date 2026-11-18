@@ -1940,10 +1940,10 @@ inline bool show_sajdah_navigator_dialog(
         bool ok = db.get_ayah_by_key(sp.verse_key, a);
         std::wstring s_name = ok ? (a.surah_name) : std::to_wstring(sp.surah);
         int page = ok ? a.page_number : 0;
-        std::wstring note = is_en ? sp.note_en : sp.note_ar;
+        std::wstring note = db.edition_has_details() ? (L" — " + (is_en ? sp.note_en : sp.note_ar)) : L"";
         std::wstring line = is_en
-            ? (std::to_wstring(idx) + L". Surah " + s_name + L" (" + sp.verse_key + L") — Page " + std::to_wstring(page) + L" — " + note)
-            : (to_arabic_digits(idx) + L" - سورة " + s_name + L" (" + to_arabic_digits(sp.surah) + L":" + to_arabic_digits(sp.ayah) + L") — صفحة " + to_arabic_digits(page) + L" — " + note);
+            ? (std::to_wstring(idx) + L". Surah " + s_name + L" (" + sp.verse_key + L") — Page " + std::to_wstring(page) + note)
+            : (to_arabic_digits(idx) + L" - سورة " + s_name + L" (" + to_arabic_digits(sp.surah) + L":" + to_arabic_digits(sp.ayah) + L") — صفحة " + to_arabic_digits(page) + note);
         SendMessageW(st.list_hwnd, LB_ADDSTRING, 0, (LPARAM)line.c_str());
         ++idx;
     }
