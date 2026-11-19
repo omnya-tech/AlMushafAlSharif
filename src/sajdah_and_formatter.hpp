@@ -435,14 +435,50 @@ inline std::wstring manzil_day_label(int manzil_number, bool en = false) {
     return en ? en_lbl[idx] : ar[idx];
 }
 
+// تشكيل عبارات بيان السورة وعلامات الهامش للعرض، كما تُكتب في المصاحف؛ الكلمات نفسها لا تتغير.
+// قارئ الشاشة والنسخ يأخذان النص بلا تشكيل
+inline std::wstring vocalize_marks_text(std::wstring s) {
+    static const std::pair<const wchar_t*, const wchar_t*> phrases[] = {
+        {L"وقد نزلت في الطريق عند الانصراف من الحديبية", L"وَقَدْ نَزَلَتْ فِي الطَّرِيقِ عِنْدَ الانْصِرَافِ مِنَ الحُدَيْبِيَةِ"},
+        {L"فنزلت في الطريق أثناء الهجرة", L"فَنَزَلَتْ فِي الطَّرِيقِ أَثْنَاءَ الهِجْرَةِ"},
+        {L"فنزلت بمنى في حجة الوداع", L"فَنَزَلَتْ بِمِنًى فِي حَجَّةِ الوَدَاعِ"},
+        {L"وقد نزلت بمنى في حجة الوداع", L"وَقَدْ نَزَلَتْ بِمِنًى فِي حَجَّةِ الوَدَاعِ"},
+        {L"فنزلت بعرفات في حجة الوداع", L"فَنَزَلَتْ بِعَرَفَاتٍ فِي حَجَّةِ الوَدَاعِ"},
+        {L"فبالجحفة أثناء الهجرة", L"فَبِالجُحْفَةِ أَثْنَاءَ الهِجْرَةِ"},
+        {L"فبين مكة والمدينة", L"فَبَيْنَ مَكَّةَ وَالمَدِينَةِ"},
+        {L"وهي آخر سورة نزلت بمكة", L"وَهِيَ آخِرُ سُورَةٍ نَزَلَتْ بِمَكَّةَ"},
+        {L"إلا الآيات", L"إِلَّا الآيَاتِ"},
+        {L"إلا الآية", L"إِلَّا الآيَةَ"},
+        {L"وآياتها", L"وَآيَاتُهَا"},
+        {L"مكية", L"مَكِّيَّةٌ"},
+        {L"مدنية", L"مَدَنِيَّةٌ"},
+        {L"عند", L"عِنْدَ"},
+        {L"الجمهور", L"الجُمْهُورِ"},
+        {L"الحنفية", L"الحَنَفِيَّةِ"},
+        {L"المالكية", L"المَالِكِيَّةِ"},
+        {L"الشافعية", L"الشَّافِعِيَّةِ"},
+        {L"الحنابلة", L"الحَنَابِلَةِ"},
+        {L" وال", L" وَال"},
+    };
+    for (const auto& p : phrases) {
+        const std::wstring from(p.first), to(p.second);
+        size_t pos = 0;
+        while ((pos = s.find(from, pos)) != std::wstring::npos) {
+            s.replace(pos, from.size(), to);
+            pos += to.size();
+        }
+    }
+    return s;
+}
+
 // ما يظهر تحت اسم السورة في طبعتي المدينة: مكية أو مدنية، وعدد آياتها
 inline std::wstring build_surah_brief(const SurahInfo& s, bool en = false, bool spoken = false) {
     const std::wstring sep = spoken ? (en ? L", " : L"، ") : L" • ";
     if (en) return std::wstring(s.revelation_place == L"مكية" ? L"Meccan" : L"Medinan") + sep + std::to_wstring(s.verses_count) + L" verses";
-    return s.revelation_place + sep + L"آياتها " + to_arabic_digits(s.verses_count);
+    return s.revelation_place + L" وآياتها " + to_arabic_digits(s.verses_count);   // كما يُكتب في المصاحف
 }
 
-inline std::wstring build_surah_heading(const QuranDatabase& db, int surah_number, bool en = false) {
+inline std::wstring build_surah_heading(const QuranDatabase& db, int surah_number, bool en = false, bool vocalized = false) {
     SurahInfo s = db.get_surah(surah_number);
     SurahHeadingInfo h = db.get_surah_heading_info(surah_number);
     if (h.type.empty()) h.type = s.revelation_place;
@@ -471,9 +507,18 @@ inline std::wstring build_surah_heading(const QuranDatabase& db, int surah_numbe
             res += L" (" + to_arabic_digits(h.place_note) + L")";
         }
         res += L"، وآياتها " + to_arabic_digits(s.verses_count);
+        if (vocalized) res = vocalize_marks_text(res);
         if (h.after_surah > 0) {
             SurahInfo prev = db.get_surah(h.after_surah);
-            res += L"، نزلت بعد سورة " + prev.name_arabic;
+            if (vocalized) {
+                // اسم السورة المشكول مضافًا إليه: «سُورَةِ الغَاشِيَةِ»
+                std::wstring name = prev.name_uthmani;
+                const std::wstring nom = L"سُورَةُ";
+                if (name.compare(0, nom.size(), nom) == 0) name = L"سُورَةِ" + name.substr(nom.size());
+                res += L"، نَزَلَتْ بَعْدَ " + name;
+            } else {
+                res += L"، نزلت بعد سورة " + prev.name_arabic;
+            }
         }
         return res;
     }
