@@ -61,8 +61,17 @@ inline const SajdahPlace* find_sajdah_place(const std::wstring& verse_key) {
 
 // موضع السجدة كما في الطبعة المختارة: طبعتا المدينة فيهما سجدة فصلت عند الآية ٣٨ وحدها
 inline const SajdahPlace* print_sajdah_place(const std::wstring& verse_key, bool edition_details) {
+    // طبعتا المدينة فيهما سجدة فصلت عند الآية ٣٨ وحدها، ودار المعارف تذكر موضعها عند المالكية أيضًا
     if (!edition_details && verse_key == L"41:37") return nullptr;
     return find_sajdah_place(verse_key);
+}
+
+// تعليق السجدة في حاشية مصحف الشمرلي، منقول بحرفه (طبعة دار المعارف)
+inline std::wstring dar_sajdah_note(const std::wstring& verse_key, bool vocalized) {
+    if (verse_key == L"22:77") return vocalized ? L"عِنْدَ الشَّافِعِيِّ" : L"عند الشافعي";
+    if (verse_key == L"38:24") return vocalized ? L"عِنْدَ أَبِي حَنِيفَةَ وَمَالِكٍ" : L"عند أبي حنيفة ومالك";
+    if (verse_key == L"53:62") return vocalized ? L"لِغَيْرِ مَالِكٍ" : L"لغير مالك";
+    return L"";
 }
 
 // مواضع «سكتة لطيفة» المكتوبة في حواشي مصحف المدينة
@@ -279,23 +288,29 @@ inline std::wstring division_spoken_vocalized(const AyahInfo& ayah) {
     return L"ثَلَاثَةُ أَرْبَاعِ الحِزْبِ " + hizb;
 }
 
-inline std::wstring sajdah_spoken_vocalized(const std::wstring& verse_key) {
-    if (verse_key == L"41:37") return L"مَوْضِعُ سَجْدَةِ تِلَاوَةٍ عِنْدَ المَالِكِيَّةِ";
+// أقوال المذاهب في السجدة بلفظ الشمرلي: «عند» ثم أسماء الأئمة، كـ«عند الشافعي وأحمد»
+inline std::wstring sajdah_imams_note(const std::wstring& verse_key, bool vocalized) {
+    if (verse_key == L"41:37") return vocalized ? L"عِنْدَ مَالِكٍ" : L"عند مالك";
     const SajdahPlace* p = find_sajdah_place(verse_key);
     if (!p) return L"";
-    if (verse_key == L"41:38") return L"سَجْدَةٌ عِنْدَ الحَنَفِيَّةِ وَالشَّافِعِيَّةِ وَالحَنَابِلَةِ (وَعِنْدَ المَالِكِيَّةِ عِنْدَ الآيَةِ ٣٧)";
-    if (p->is_agreed()) return L"سَجْدَةُ تِلَاوَةٍ (مُتَّفَقٌ عَلَيْهَا عِنْدَ الأَئِمَّةِ الأَرْبَعَةِ)";
+    if (verse_key == L"41:38") return vocalized ? L"عِنْدَ الجُمْهُورِ" : L"عند الجمهور";
+    if (p->is_agreed()) return L"";
     std::vector<std::wstring> names;
-    if (p->hanafi)  names.push_back(L"الحَنَفِيَّةِ");
-    if (p->maliki)  names.push_back(L"المَالِكِيَّةِ");
-    if (p->shafii)  names.push_back(L"الشَّافِعِيَّةِ");
-    if (p->hanbali) names.push_back(L"الحَنَابِلَةِ");
-    std::wstring joined;
-    for (size_t i = 0; i < names.size(); ++i) {
-        if (i > 0) joined += L" وَ";
-        joined += names[i];
-    }
-    return L"سَجْدَةٌ عِنْدَ " + joined;
+    if (p->hanafi)  names.push_back(vocalized ? L"أَبِي حَنِيفَةَ" : L"أبي حنيفة");
+    if (p->maliki)  names.push_back(vocalized ? L"مَالِكٍ" : L"مالك");
+    if (p->shafii)  names.push_back(vocalized ? L"الشَّافِعِيِّ" : L"الشافعي");
+    if (p->hanbali) names.push_back(vocalized ? L"أَحْمَدَ" : L"أحمد");
+    std::wstring out = vocalized ? L"عِنْدَ " : L"عند ";
+    for (size_t i = 0; i < names.size(); ++i) out += (i ? (vocalized ? L" وَ" : L" و") : L"") + names[i];
+    return out;
+}
+
+// نطق السجدة في طبعة دار المعارف مشكولًا، بلفظ الحاشية
+inline std::wstring sajdah_spoken_vocalized(const std::wstring& verse_key) {
+    if (!find_sajdah_place(verse_key)) return L"";
+    const std::wstring note = sajdah_imams_note(verse_key, true);
+    if (note.empty()) return L"سَجْدَةُ تِلَاوَةٍ (مُتَّفَقٌ عَلَيْهَا عِنْدَ الأَئِمَّةِ الأَرْبَعَةِ)";
+    return L"سَجْدَةٌ " + note;
 }
 
 inline std::wstring division_spoken_text(const AyahInfo& ayah, bool en = false) {
@@ -348,8 +363,14 @@ inline std::wstring build_ayah_accessible_name(
 
     std::wstring sajdah;
     if (speak_marks) {
-        if (edition_details) sajdah = en ? sajdah_short_label(ayah.verse_key, true) : sajdah_spoken_vocalized(ayah.verse_key);
-        else if (print_sajdah_place(ayah.verse_key, false)) sajdah = en ? L"prostration of recitation" : L"سَجْدَةُ تِلَاوَةٍ";
+        if (print_sajdah_place(ayah.verse_key, edition_details)) {
+            if (en) {
+                sajdah = edition_details ? sajdah_short_label(ayah.verse_key, true) : L"prostration of recitation";
+            } else {
+                // دار المعارف تذكر أقوال المذاهب الأربعة، وطبعتا المدينة «سجدة تلاوة»
+                sajdah = edition_details ? sajdah_spoken_vocalized(ayah.verse_key) : L"سَجْدَةُ تِلَاوَةٍ";
+            }
+        }
     }
     std::wstring div = (speak_marks && is_rub_start) ? (en ? division_spoken_text(ayah, true) : division_spoken_vocalized(ayah)) : L"";
     // إذا كانت علامات الوقف تُنطق فالسكتة مذكورة في موضعها من الآية
@@ -510,6 +531,97 @@ inline std::wstring build_surah_brief(const SurahInfo& s, bool en = false, bool 
     return s.revelation_place + L" وآياتها " + to_arabic_digits(s.verses_count);   // كما يُكتب في المصاحف
 }
 
+// جملة الاستثناء كما تُكتب في رؤوس السور بالمصاحف المصرية:
+// «إلا الآية ٢٨ ومن الآية ٨٣ إلى الآية ١٠١ فمدنية، والآية ٨٥ فبالجحفة أثناء الهجرة»
+inline std::wstring build_exception_clause(const SurahHeadingInfo& h, bool vocalized) {
+    auto V = [&](const wchar_t* plain, const wchar_t* voc) { return std::wstring(vocalized ? voc : plain); };
+    auto num = [](int n) { return to_arabic_digits(n); };
+    const std::wstring and_ = V(L" و", L" وَ");
+    std::wstring out;
+    for (size_t g = 0; g < h.groups.size(); ++g) {
+        const auto& grp = h.groups[g];
+        // الآيات بترتيبها: المفردة المتجاورة تُجمع، وكل ثلاث متتالية فأكثر «من الآية … إلى الآية …»
+        std::vector<std::wstring> segs;
+        std::vector<int> singles;
+        auto flush_singles = [&]() {
+            if (singles.size() == 1) {
+                segs.push_back(V(L"الآية ", L"الآيَةَ ") + num(singles[0]));
+            } else if (singles.size() == 2) {
+                segs.push_back(V(L"الآيتين ", L"الآيَتَيْنِ ") + num(singles[0]) + and_ + num(singles[1]));
+            } else if (singles.size() > 2) {
+                std::wstring list;
+                for (size_t k = 0; k < singles.size(); ++k) list += (k ? L"، " : L"") + num(singles[k]);
+                segs.push_back(V(L"الآيات ", L"الآيَاتِ ") + list);
+            }
+            singles.clear();
+        };
+        for (size_t i = 0; i < grp.verses.size();) {
+            size_t j = i;
+            while (j + 1 < grp.verses.size() && grp.verses[j + 1] == grp.verses[j] + 1) ++j;
+            if (j - i >= 2) {
+                flush_singles();
+                segs.push_back(V(L"من الآية ", L"مِنَ الآيَةِ ") + num(grp.verses[i]) + V(L" إلى الآية ", L" إِلَى الآيَةِ ") + num(grp.verses[j]));
+            } else {
+                for (size_t k = i; k <= j; ++k) singles.push_back(grp.verses[k]);
+            }
+            i = j + 1;
+        }
+        flush_singles();
+        std::wstring phrase;
+        for (size_t k = 0; k < segs.size(); ++k) phrase += (k ? and_ : L"") + segs[k];
+        std::wstring tail;
+        if (!grp.place.empty()) {
+            tail = vocalized ? vocalize_marks_text(grp.place) : grp.place;
+        } else {
+            std::wstring kind = grp.kind;
+            if (kind.empty()) kind = (h.type == L"مكية") ? L"مدنية" : L"مكية";
+            const bool medinan = (kind == L"مدنية");
+            if (grp.verses.size() == 2) {
+                // الآيتان: «فمدنيتان» كما في رؤوس السور المطبوعة
+                tail = vocalized ? (medinan ? L"فَمَدَنِيَّتَانِ" : L"فَمَكِّيَّتَانِ") : (medinan ? L"فمدنيتان" : L"فمكيتان");
+            } else {
+                tail = vocalized ? (L"فَ" + vocalize_marks_text(kind)) : (L"ف" + kind);
+            }
+        }
+        out += (g == 0 ? V(L"إلا ", L"إِلَّا ") : V(L"، و", L"، وَ")) + phrase + L" " + tail;
+    }
+    return out;
+}
+
+// النص بلا تشكيل، للنسخ
+inline std::wstring strip_harakat(const std::wstring& t) {
+    std::wstring out;
+    for (wchar_t ch : t) {
+        if ((ch >= 0x064B && ch <= 0x0655) || ch == 0x0670 || ch == 0x06E1) continue;
+        out.push_back(ch);
+    }
+    return out;
+}
+
+// ترويسة السورة في طبعة دار المعارف على صيغة مصحف الشمرلي، مشكولة:
+// «مَكِّيَّةٌ إِلَّا مِنْ آيَةِ ٥٢ إِلَى آيَةِ ٥٥ فَمَدَنِيَّةٌ … وَآيَاتُهَا ٨٨ نَزَلَتْ بَعْدَ النَّمْلِ»
+inline std::wstring shamarly_heading_vocalized(const QuranDatabase& db, int surah_number) {
+    SurahInfo s = db.get_surah(surah_number);
+    SurahHeadingInfo h = db.get_surah_heading_info(surah_number);
+    if (!h.heading_vocalized.empty()) return h.heading_vocalized;
+    std::wstring v = vocalize_marks_text(h.type.empty() ? s.revelation_place : h.type) + L" وَآيَاتُهَا " + to_arabic_digits(s.verses_count);
+    if (h.after_surah > 0) {
+        std::wstring name = db.get_surah(h.after_surah).name_uthmani;
+        const std::wstring prefix = L"سُورَةُ ";
+        if (name.compare(0, prefix.size(), prefix) == 0) name = name.substr(prefix.size());
+        v += L" نَزَلَتْ بَعْدَ " + name;
+    }
+    return v;
+}
+
+// جزء الاستثناء من ترويسة الشمرلي: من «إِلَّا» إلى ما قبل «وَآيَاتُهَا»
+inline std::wstring shamarly_exception_part(const QuranDatabase& db, int surah_number) {
+    const std::wstring v = shamarly_heading_vocalized(db, surah_number);
+    const size_t a = v.find(L"إِلَّا"), b = v.find(L" وَآيَاتُهَا");
+    if (a == std::wstring::npos || b == std::wstring::npos || b <= a) return L"";
+    return v.substr(a, b - a);
+}
+
 inline std::wstring build_surah_heading(const QuranDatabase& db, int surah_number, bool en = false, bool vocalized = false) {
     SurahInfo s = db.get_surah(surah_number);
     SurahHeadingInfo h = db.get_surah_heading_info(surah_number);
@@ -530,29 +642,9 @@ inline std::wstring build_surah_heading(const QuranDatabase& db, int surah_numbe
         }
         return res;
     } else {
-        std::wstring res = h.type;
-        if (!h.excepted_verses.empty()) {
-            bool multi = (h.excepted_verses.find(L'،') != std::wstring::npos || h.excepted_verses.find(L'-') != std::wstring::npos);
-            res += (multi ? L"، إلا الآيات " : L"، إلا الآية ") + to_arabic_digits(h.excepted_verses);
-        }
-        if (!h.place_note.empty()) {
-            res += L" (" + to_arabic_digits(h.place_note) + L")";
-        }
-        res += L"، وآياتها " + to_arabic_digits(s.verses_count);
-        if (vocalized) res = vocalize_marks_text(res);
-        if (h.after_surah > 0) {
-            SurahInfo prev = db.get_surah(h.after_surah);
-            if (vocalized) {
-                // اسم السورة المشكول مضافًا إليه: «سُورَةِ الغَاشِيَةِ»
-                std::wstring name = prev.name_uthmani;
-                const std::wstring nom = L"سُورَةُ";
-                if (name.compare(0, nom.size(), nom) == 0) name = L"سُورَةِ" + name.substr(nom.size());
-                res += L"، نَزَلَتْ بَعْدَ " + name;
-            } else {
-                res += L"، نزلت بعد سورة " + prev.name_arabic;
-            }
-        }
-        return res;
+        // ترويسة الشمرلي بنصها في سطر واحد، مشكولة للعرض وبلا تشكيل للنسخ
+        const std::wstring v = shamarly_heading_vocalized(db, surah_number);
+        return vocalized ? v : strip_harakat(v);
     }
 }
 

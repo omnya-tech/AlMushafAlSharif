@@ -108,8 +108,18 @@ struct EditionLine {
 // كلمات الآية بالرسم العثماني كما تُعدّ في ملف السطور: علامات الوقف تلحق بالكلمة قبلها، و«۞» بالتي بعدها
 std::vector<std::wstring> uthmani_words(const std::wstring& text_uthmani);
 
+// مجموعة آيات مستثناة من مكان نزول السورة، كما في رؤوس السور بالمصاحف المصرية
+struct SurahExceptionGroup {
+    std::vector<int> verses;
+    std::wstring kind;    // مكية أو مدنية (فارغ: عكس نوع السورة)
+    std::wstring place;   // موضع نزولها إن ذُكر، مثل «فبالجحفة أثناء الهجرة»
+};
+
 struct SurahHeadingInfo {
     std::wstring type;
+    std::vector<SurahExceptionGroup> groups;
+    std::wstring top_note;   // ملاحظة عامة عن نزول السورة
+    std::wstring heading_vocalized;   // ترويسة الشمرلي بنصها مشكولة، إن وُجدت لها صيغة خاصة
     std::wstring excepted_verses;
     std::wstring place_note;
     std::wstring excepted_verses_en;   // الآيات المستثناة بفواصل إنجليزية

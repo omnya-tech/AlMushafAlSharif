@@ -228,6 +228,8 @@ void QuranDatabase::load_headings(const std::wstring& path) {
         h.type = to_wide(extract_json_string(block, "type"));
         h.after_surah = extract_json_int(block, "revealed_after");
         std::wstring top_note = to_wide(extract_json_string(block, "note"));
+        h.top_note = top_note;
+        h.heading_vocalized = to_wide(extract_json_string(block, "heading"));
 
         std::vector<int> all_verses;
         std::vector<std::wstring> exc_details, exc_details_en;
@@ -271,6 +273,7 @@ void QuranDatabase::load_headings(const std::wstring& path) {
 
                     std::wstring kind = to_wide(extract_json_string(eblock, "kind"));
                     std::wstring place = to_wide(extract_json_string(eblock, "place"));
+                    if (!everses.empty()) h.groups.push_back({everses, kind, place});
                     std::wstring detail;
                     if (!kind.empty() && !place.empty()) detail = kind + L" — " + place;
                     else if (!kind.empty()) detail = kind;
