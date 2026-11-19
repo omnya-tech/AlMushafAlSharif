@@ -884,8 +884,8 @@ public:
                 std::wstring place_txt = is_en() ? ((s.revelation_place == L"مكية") ? L"Meccan" : L"Medinan") : s.revelation_place;
                 std::wstring pages = page_range_text(s.start_page, s.end_page);
                 std::wstring label = is_en()
-                    ? (std::to_wstring(s.number) + L". Surah " + s_name + L" — from ayah 1 to ayah " + std::to_wstring(s.verses_count) + L" (" + place_txt + L" • " + pages + L")")
-                    : (num_str(s.number) + L" - سورة " + s_name + L" — من الآية ١ إلى الآية " + num_str(s.verses_count) + L" (" + place_txt + L" • " + pages + L")");
+                    ? (std::to_wstring(s.number) + L". Surah " + s_name + L" — " + std::to_wstring(s.verses_count) + L" ayahs (" + place_txt + L" • " + pages + L")")
+                    : (num_str(s.number) + L" - سورة " + s_name + L" — " + ayah_count_ar(s.verses_count, false) + L" (" + place_txt + L" • " + pages + L")");
                 out_items.push_back({s.number, label});
             }
         } else if (settings.browse_scope == L"page") {
@@ -5340,6 +5340,16 @@ static int run_self_test() {
                 AyahListItemData mid_hdr;
                 app.fill_surah_header(mid_hdr, app.db->get_surah(2), false);
                 SELFTEST_CHECK(mid_hdr.sub_text.empty());
+            }
+            {
+                const std::wstring saved_scope = app.settings.browse_scope;
+                app.settings.browse_scope = L"surah";
+                std::vector<std::pair<int, std::wstring>> items; int tgt = 0;
+                app.populate_units_and_index_items(items, tgt);
+                SELFTEST_CHECK(items.size() == 114 && items[1].second.find(L"سورة البقرة — ٢٨٦ آية (") != std::wstring::npos);
+                SELFTEST_CHECK(items[0].second.find(L"— ٧ آيات (") != std::wstring::npos);
+                SELFTEST_CHECK(items[1].second.find(L"من الآية") == std::wstring::npos);
+                app.settings.browse_scope = saved_scope;
             }
             // ترويسات دار المعارف بنص الشمرلي
             SELFTEST_CHECK(build_surah_heading(*app.db, 28) ==
