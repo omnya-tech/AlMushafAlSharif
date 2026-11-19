@@ -61,8 +61,9 @@ inline const SajdahPlace* find_sajdah_place(const std::wstring& verse_key) {
 
 // موضع السجدة كما في الطبعة المختارة: طبعتا المدينة فيهما سجدة فصلت عند الآية ٣٨ وحدها
 inline const SajdahPlace* print_sajdah_place(const std::wstring& verse_key, bool edition_details) {
-    // طبعتا المدينة فيهما سجدة فصلت عند الآية ٣٨ وحدها، ودار المعارف تذكر موضعها عند المالكية أيضًا
-    if (!edition_details && verse_key == L"41:37") return nullptr;
+    // الطبعات الثلاث فيها سجدة فصلت عند الآية ٣٨ وحدها؛ ودار المعارف تذكر معها موضعها عند المالكية
+    (void)edition_details;
+    if (verse_key == L"41:37") return nullptr;
     return find_sajdah_place(verse_key);
 }
 
@@ -288,28 +289,36 @@ inline std::wstring division_spoken_vocalized(const AyahInfo& ayah) {
     return L"ثَلَاثَةُ أَرْبَاعِ الحِزْبِ " + hizb;
 }
 
-// أقوال المذاهب في السجدة بلفظ الشمرلي: «عند» ثم أسماء الأئمة، كـ«عند الشافعي وأحمد»
+// أقوال المذاهب في السجدة المختلف فيها: «عند» ثم المذاهب، كـ«عند الشافعية والحنابلة»
+// (فارغ في المتفق عليها). سجدة فصلت ٣٨ يتبعها موضعها عند المالكية بين قوسين
 inline std::wstring sajdah_imams_note(const std::wstring& verse_key, bool vocalized) {
-    if (verse_key == L"41:37") return vocalized ? L"عِنْدَ مَالِكٍ" : L"عند مالك";
     const SajdahPlace* p = find_sajdah_place(verse_key);
-    if (!p) return L"";
-    if (verse_key == L"41:38") return vocalized ? L"عِنْدَ الجُمْهُورِ" : L"عند الجمهور";
+    if (!p || verse_key == L"41:37") return L"";
+    if (verse_key == L"41:38") {
+        return vocalized ? L"عِنْدَ الحَنَفِيَّةِ وَالشَّافِعِيَّةِ وَالحَنَابِلَةِ (وَعِنْدَ المَالِكِيَّةِ عِنْدَ الآيَةِ ٣٧)"
+                         : L"عند الحنفية والشافعية والحنابلة (وعند المالكية عند الآية ٣٧)";
+    }
     if (p->is_agreed()) return L"";
     std::vector<std::wstring> names;
-    if (p->hanafi)  names.push_back(vocalized ? L"أَبِي حَنِيفَةَ" : L"أبي حنيفة");
-    if (p->maliki)  names.push_back(vocalized ? L"مَالِكٍ" : L"مالك");
-    if (p->shafii)  names.push_back(vocalized ? L"الشَّافِعِيِّ" : L"الشافعي");
-    if (p->hanbali) names.push_back(vocalized ? L"أَحْمَدَ" : L"أحمد");
+    if (p->hanafi)  names.push_back(vocalized ? L"الحَنَفِيَّةِ" : L"الحنفية");
+    if (p->maliki)  names.push_back(vocalized ? L"المَالِكِيَّةِ" : L"المالكية");
+    if (p->shafii)  names.push_back(vocalized ? L"الشَّافِعِيَّةِ" : L"الشافعية");
+    if (p->hanbali) names.push_back(vocalized ? L"الحَنَابِلَةِ" : L"الحنابلة");
     std::wstring out = vocalized ? L"عِنْدَ " : L"عند ";
     for (size_t i = 0; i < names.size(); ++i) out += (i ? (vocalized ? L" وَ" : L" و") : L"") + names[i];
     return out;
+}
+
+// المتفق عليها بين الأئمة الأربعة، مشكولًا
+inline const wchar_t* sajdah_agreed_note_vocalized() {
+    return L"(مُتَّفَقٌ عَلَيْهَا عِنْدَ الأَئِمَّةِ الأَرْبَعَةِ)";
 }
 
 // نطق السجدة في طبعة دار المعارف مشكولًا، بلفظ الحاشية
 inline std::wstring sajdah_spoken_vocalized(const std::wstring& verse_key) {
     if (!find_sajdah_place(verse_key)) return L"";
     const std::wstring note = sajdah_imams_note(verse_key, true);
-    if (note.empty()) return L"سَجْدَةُ تِلَاوَةٍ (مُتَّفَقٌ عَلَيْهَا عِنْدَ الأَئِمَّةِ الأَرْبَعَةِ)";
+    if (note.empty()) return std::wstring(L"سَجْدَةٌ ") + sajdah_agreed_note_vocalized();
     return L"سَجْدَةٌ " + note;
 }
 
@@ -347,7 +356,8 @@ inline std::wstring build_ayah_accessible_name(
     int letter_count = 0,
     bool speak_waqf = false,
     bool speak_marks = true,  // نطق علامات الأجزاء والأحزاب والأرباع والسجدات والسكتات مع الآية
-    bool edition_details = true   // أقوال المذاهب في السجدة تُذكر في طبعة دار المعارف وحدها
+    bool edition_details = true,  // أقوال المذاهب في السجدة تُذكر في طبعة دار المعارف وحدها
+    const wchar_t* sajdah_word = L"سَجْدَة"   // كلمة السجدة في طبعتي المدينة: «سَجْدَة»، و«سَجْدَةُ تِلَاوَةٍ» في القديمة
 ) {
     std::wstring spoken = prepare_ayah_for_screen_reader(ayah, phonetic_norm, spell_muqattaat, speak_waqf);
     std::wstring tail;
@@ -367,8 +377,8 @@ inline std::wstring build_ayah_accessible_name(
             if (en) {
                 sajdah = edition_details ? sajdah_short_label(ayah.verse_key, true) : L"prostration of recitation";
             } else {
-                // دار المعارف تذكر أقوال المذاهب الأربعة، وطبعتا المدينة «سجدة تلاوة»
-                sajdah = edition_details ? sajdah_spoken_vocalized(ayah.verse_key) : L"سَجْدَةُ تِلَاوَةٍ";
+                // دار المعارف تذكر أقوال المذاهب الأربعة، وطبعتا المدينة كلمة السجدة كما في هامشهما
+                sajdah = edition_details ? sajdah_spoken_vocalized(ayah.verse_key) : std::wstring(sajdah_word);
             }
         }
     }

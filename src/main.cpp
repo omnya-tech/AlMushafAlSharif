@@ -1128,8 +1128,8 @@ public:
         const SajdahPlace* sp = print_sajdah_place(a.verse_key, edition_details);
         if (sp) {
             if (text.find(L"۩") == std::wstring::npos) text += L" ۩";
-            if (marks_inline() && edition_details && (!sp->is_agreed() || a.verse_key == L"41:37" || a.verse_key == L"41:38")) {
-                std::wstring lbl = is_en() ? sajdah_short_label(a.verse_key, true) : (L"سجدة " + sajdah_imams_note(a.verse_key, false));
+            if (marks_inline() && edition_details && (!sp->is_agreed() || a.verse_key == L"41:38")) {
+                std::wstring lbl = is_en() ? sajdah_short_label(a.verse_key, true) : (L"سَجْدَةٌ " + sajdah_imams_note(a.verse_key, true));
                 text += L"  [" + (is_kfgqpc ? to_western_digits(lbl) : lbl) + L"]";
             }
         }
@@ -1182,7 +1182,8 @@ public:
             lcnt,
             settings.sr_speak_waqf,
             settings.sr_speak_marks,
-            db->edition_has_details()
+            db->edition_has_details(),
+            db->edition() == L"madinah_1405" ? L"سَجْدَةُ تِلَاوَةٍ" : L"سَجْدَة"
         );
     }
 
@@ -1374,24 +1375,29 @@ public:
         const SajdahPlace* sp = print_sajdah_place(a.verse_key, details);
         if (!sp) return out;
         // «سَجْدَة» في المدينة الحديثة كمصحفها، و«سَجْدَةُ تِلَاوَةٍ» في المدينة القديمة،
-        // و«سَجْدَةٌ» في دار المعارف ومعها أقوال المذاهب الأربعة
+        // وفي دار المعارف «سَجْدَةٌ» ومعها المذاهب أو أنها متفق عليها
+        const bool agreed = sp->is_agreed() && a.verse_key != L"41:38";
         out.push_back(details ? tr(L"سَجْدَةٌ", L"Sajdah")
                       : db->edition() == L"madinah_1405" ? tr(L"سَجْدَةُ تِلَاوَةٍ", L"Sajdah") : tr(L"سَجْدَة", L"Sajdah"));
         if (details) {
             std::wstring note;
             if (en) {
-                if (a.verse_key == L"41:37") note = L"Maliki";
-                else if (a.verse_key == L"41:38") note = L"majority";
-                else if (!sp->is_agreed()) {
+                if (!agreed) {
                     note = sajdah_short_label(a.verse_key, true);
                     const std::wstring pre = L"prostration (";
                     if (note.compare(0, pre.size(), pre) == 0) note = note.substr(pre.size());
                     if (!note.empty() && note.back() == L')') note.pop_back();
                 }
+                if (!note.empty()) out.push_back(note);
+            } else if (agreed) {
+                out.push_back(sajdah_agreed_note_vocalized());
             } else {
-                note = sajdah_imams_note(a.verse_key, true);   // بلفظ الشمرلي، مشكولًا
+                // المذاهب سطر، وموضع المالكية في فصلت سطر بعده
+                note = sajdah_imams_note(a.verse_key, true);
+                const size_t paren = note.find(L" (");
+                out.push_back(note.substr(0, paren));
+                if (paren != std::wstring::npos) out.push_back(note.substr(paren + 1));
             }
-            if (!note.empty()) out.push_back(note);
         }
         return out;
     }
@@ -1451,9 +1457,10 @@ public:
     int header_gap() const { return DS(34); }
 
     // نص الترويسة المرئي والمنطوق: قارئ الشاشة ينطق البيان مشكولًا كما يراه المبصر
-    void fill_surah_header(AyahListItemData& hdr, const SurahInfo& s) const {
+    // البيان في أول السورة وحده؛ الصفحة التي تبدأ من وسط السورة يعلوها اسمها فقط
+    void fill_surah_header(AyahListItemData& hdr, const SurahInfo& s, bool surah_start = true) const {
         hdr.visual_text = s.name_uthmani;   // «سُورَةُ ...» داخل إطار مزخرف
-        hdr.sub_text = surah_header_sub(s);
+        hdr.sub_text = surah_start ? surah_header_sub(s) : L"";
         hdr.spoken_text = is_en() ? (L"Surah " + s.name_arabic) : (L"سورة " + s.name_arabic);
         if (!hdr.sub_text.empty()) {
             const std::wstring spoken_sub = (is_en() && !db->edition_has_details()) ? build_surah_brief(s, true, true) : hdr.sub_text;
@@ -1964,7 +1971,7 @@ public:
                 // اسم السورة وبيانها في سطر واحد داخل الإطار: المدينة الحديثة الاسم وحده كمصحفها،
                 // والقديمة مكان النزول وعدد الآيات، ودار المعارف ترويسة الشمرلي
                 (void)edition_details; (void)place_txt; (void)s_name;
-                fill_surah_header(hdr, s);
+                fill_surah_header(hdr, s, a.ayah_number == 1);
                 add_ayah_list_row(hdc, hdr);
 
                 if (a.ayah_number == 1 && s.bismillah_pre) {
@@ -5307,21 +5314,33 @@ static int run_self_test() {
             AyahInfo f37, f38;
             SELFTEST_CHECK(app.db->get_ayah(41, 37, f37) && app.db->get_ayah(41, 38, f38));
             SELFTEST_CHECK(app.db->edition_has_details());
-            // دار المعارف: «سجدة تلاوة» مع أقوال المذاهب الأربعة، وموضع المالكية في فصلت ٣٧
-            SELFTEST_CHECK(app.format_visual_ayah(f37).find(L"۩") != std::wstring::npos);
+            // دار المعارف: أقوال المذاهب في السجدة، وسجدة فصلت عند الآية ٣٨ ومعها موضعها عند المالكية
+            SELFTEST_CHECK(app.format_visual_ayah(f37).find(L"۩") == std::wstring::npos);
+            SELFTEST_CHECK(app.margin_sajdah_lines(f37).empty());
             {
-                const auto m37 = app.margin_sajdah_lines(f37);
-                SELFTEST_CHECK(m37.size() == 2 && m37[0] == L"سَجْدَةٌ" && m37[1] == L"عِنْدَ مَالِكٍ");
+                const auto m38 = app.margin_sajdah_lines(f38);
+                SELFTEST_CHECK(m38.size() == 3 && m38[0] == L"سَجْدَةٌ" &&
+                               m38[1] == L"عِنْدَ الحَنَفِيَّةِ وَالشَّافِعِيَّةِ وَالحَنَابِلَةِ" &&
+                               m38[2] == L"(وَعِنْدَ المَالِكِيَّةِ عِنْدَ الآيَةِ ٣٧)");
+                SELFTEST_CHECK(app.format_spoken_ayah(f38).find(L"سَجْدَةٌ عِنْدَ الحَنَفِيَّةِ وَالشَّافِعِيَّةِ وَالحَنَابِلَةِ (وَعِنْدَ المَالِكِيَّةِ عِنْدَ الآيَةِ ٣٧)") != std::wstring::npos);
                 AyahInfo h77;
                 SELFTEST_CHECK(app.db->get_ayah(22, 77, h77));
                 const auto ml = app.margin_sajdah_lines(h77);
-                SELFTEST_CHECK(ml.size() == 2 && ml[0] == L"سَجْدَةٌ" && ml[1] == L"عِنْدَ الشَّافِعِيِّ وَأَحْمَدَ");
-                SELFTEST_CHECK(app.format_spoken_ayah(h77).find(L"سَجْدَةٌ عِنْدَ الشَّافِعِيِّ وَأَحْمَدَ") != std::wstring::npos);
-                AyahInfo sad24;
-                SELFTEST_CHECK(app.db->get_ayah(38, 24, sad24));
-                SELFTEST_CHECK(app.margin_sajdah_lines(sad24).back() == L"عِنْدَ أَبِي حَنِيفَةَ وَمَالِكٍ");
+                SELFTEST_CHECK(ml.size() == 2 && ml[0] == L"سَجْدَةٌ" && ml[1] == L"عِنْدَ الشَّافِعِيَّةِ وَالحَنَابِلَةِ");
+                SELFTEST_CHECK(app.format_spoken_ayah(h77).find(L"سَجْدَةٌ عِنْدَ الشَّافِعِيَّةِ وَالحَنَابِلَةِ") != std::wstring::npos);
+                AyahInfo sad24, alaq19, araf206;
+                SELFTEST_CHECK(app.db->get_ayah(38, 24, sad24) && app.db->get_ayah(96, 19, alaq19) && app.db->get_ayah(7, 206, araf206));
+                SELFTEST_CHECK(app.margin_sajdah_lines(sad24).back() == L"عِنْدَ الحَنَفِيَّةِ وَالمَالِكِيَّةِ");
+                SELFTEST_CHECK(app.margin_sajdah_lines(alaq19).back() == L"عِنْدَ الحَنَفِيَّةِ وَالشَّافِعِيَّةِ وَالحَنَابِلَةِ");
+                const auto ma = app.margin_sajdah_lines(araf206);
+                SELFTEST_CHECK(ma.size() == 2 && ma[0] == L"سَجْدَةٌ" && ma[1] == L"(مُتَّفَقٌ عَلَيْهَا عِنْدَ الأَئِمَّةِ الأَرْبَعَةِ)");
+                SELFTEST_CHECK(app.format_spoken_ayah(araf206).find(L"سَجْدَةٌ (مُتَّفَقٌ عَلَيْهَا عِنْدَ الأَئِمَّةِ الأَرْبَعَةِ)") != std::wstring::npos);
             }
-            SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"عِنْدَ مَالِكٍ") != std::wstring::npos);
+            {
+                AyahListItemData mid_hdr;
+                app.fill_surah_header(mid_hdr, app.db->get_surah(2), false);
+                SELFTEST_CHECK(mid_hdr.sub_text.empty());
+            }
             // ترويسات دار المعارف بنص الشمرلي
             SELFTEST_CHECK(build_surah_heading(*app.db, 28) ==
                 L"مكية إلا من آية ٥٢ إلى آية ٥٥ فمدنية وآية ٨٥ فنزلت بالجحفة أثناء الهجرة وآياتها ٨٨ نزلت بعد النمل");
@@ -5398,6 +5417,9 @@ static int run_self_test() {
             SELFTEST_CHECK(app.db->get_ayah(96, 19, m1) && m1.page_number == 597);
             SELFTEST_CHECK(app.db->get_ayah(100, 9, m1) && m1.page_number == 599);
             SELFTEST_CHECK(app.format_visual_ayah(f37).find(L"۩") == std::wstring::npos);
+            // المدينة القديمة وحدها تكتب «سَجْدَةُ تِلَاوَةٍ» وتنطقها
+            SELFTEST_CHECK(app.margin_sajdah_lines(f38).size() == 1 && app.margin_sajdah_lines(f38)[0] == L"سَجْدَةُ تِلَاوَةٍ");
+            SELFTEST_CHECK(app.format_spoken_ayah(f38).find(L"سَجْدَةُ تِلَاوَةٍ") != std::wstring::npos);
 
             // طبعة المدينة الحديثة
             SELFTEST_CHECK(app.db->set_edition(L"madinah") == L"madinah");
@@ -5407,7 +5429,8 @@ static int run_self_test() {
             SELFTEST_CHECK(app.format_visual_ayah(f37).find(L"۩") == std::wstring::npos);
             SELFTEST_CHECK(app.format_visual_ayah(f38).find(L"۩") != std::wstring::npos);
             SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"مَالِكٍ") == std::wstring::npos);
-            SELFTEST_CHECK(app.format_spoken_ayah(f38).find(L"سَجْدَةُ تِلَاوَةٍ") != std::wstring::npos);
+            SELFTEST_CHECK(app.format_spoken_ayah(f38).find(L"سَجْدَة") != std::wstring::npos);
+            SELFTEST_CHECK(app.format_spoken_ayah(f38).find(L"تِلَاوَةٍ") == std::wstring::npos);
             SELFTEST_CHECK(app.margin_sajdah_lines(f37).empty());
             SELFTEST_CHECK(app.margin_sajdah_lines(f38).size() == 1 && app.margin_sajdah_lines(f38)[0] == L"سَجْدَة");
             // الربع الذي يبدأ بأول السورة: علامته في الهامش بلا ۞ في سطر الآية
