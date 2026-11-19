@@ -1369,7 +1369,7 @@ public:
         const bool en = is_en();
         // طبعتا المدينة تكتبان في الحاشية «سجدة» وحدها
         if (!db->edition_has_details()) {
-            if (print_sajdah_place(a.verse_key, false)) out.push_back(tr(L"سَجْدَةٌ", L"Sajdah"));
+            if (print_sajdah_place(a.verse_key, false)) out.push_back(tr(L"سجدةٌ", L"Sajdah"));
             return out;
         }
         if (const SajdahPlace* sp = find_sajdah_place(a.verse_key)) {
@@ -1387,7 +1387,8 @@ public:
             out.push_back(tr(L"۩ سجدة", L"۩ Sajdah"));
             out.push_back(tr(L"عند المالكية", L"Maliki"));
         }
-        if (!en) for (auto& ln : out) ln = vocalize_marks_text(ln == L"۩ سجدة" ? L"۩ سَجْدَةٌ" : ln);
+        // في دار المعارف تُشكَّل العلامة كلها: «۩ سَجْدَةٌ» ثم أقوال المذاهب مجرورة بعد «عِنْدَ»
+        if (!en) for (auto& ln : out) ln = (ln == L"۩ سجدة") ? std::wstring(L"۩ سَجْدَةٌ") : vocalize_marks_text(ln);
         return out;
     }
 
