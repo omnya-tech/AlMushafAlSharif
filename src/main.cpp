@@ -5324,11 +5324,11 @@ static int run_self_test() {
             SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"عِنْدَ مَالِكٍ") != std::wstring::npos);
             // ترويسات دار المعارف بنص الشمرلي
             SELFTEST_CHECK(build_surah_heading(*app.db, 28) ==
-                L"مكية إلا من الآية ٥٢ إلى الآية ٥٥ فمدنية والآية ٨٥ فنزلت بالجحفة أثناء الهجرة وآياتها ٨٨ نزلت بعد النمل");
+                L"مكية إلا من آية ٥٢ إلى آية ٥٥ فمدنية وآية ٨٥ فنزلت بالجحفة أثناء الهجرة وآياتها ٨٨ نزلت بعد النمل");
             SELFTEST_CHECK(build_surah_heading(*app.db, 18) ==
-                L"مكية إلا الآية ٢٨ ومن الآية ٨٣ إلى الآية ١٠١ فمدنية وآياتها ١١٠ نزلت بعد الغاشية");
+                L"مكية إلا الآية ٢٨ ومن آية ٨٣ إلى آية ١٠١ فمدنية وآياتها ١١٠ نزلت بعد الغاشية");
             SELFTEST_CHECK(build_surah_heading(*app.db, 14) ==
-                L"مكية إلا الآيتين ٢٨، ٢٩ فمدنيتان وآياتها ٥٢ نزلت بعد نوح");
+                L"مكية إلا آيتي ٢٨، ٢٩ فمدنيتان وآياتها ٥٢ نزلت بعد نوح");
             SELFTEST_CHECK(build_surah_heading(*app.db, 3) == L"مدنية وآياتها ٢٠٠ نزلت بعد الأنفال");
             SELFTEST_CHECK(build_surah_heading(*app.db, 96) == L"مكية وآياتها ١٩ وهي أول ما نزل من القرآن");
             SELFTEST_CHECK(build_surah_heading(*app.db, 9).find(L"فمكيتان") != std::wstring::npos);
