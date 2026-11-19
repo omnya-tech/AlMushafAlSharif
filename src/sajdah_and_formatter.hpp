@@ -266,6 +266,38 @@ inline std::wstring division_badge_text(const AyahInfo& ayah, bool en = false) {
     return L"[۞ Three-quarters of hizb " + std::to_wstring(hizb) + L"]";
 }
 
+// العلامة منطوقة مشكولة لقارئ الشاشة، كما يراها المبصر مشكولة في الهامش
+inline std::wstring division_spoken_vocalized(const AyahInfo& ayah) {
+    const int rub = ayah.rub_el_hizb_number;
+    if (rub < 2) return L"";
+    const std::wstring hizb = std::to_wstring(ayah.hizb_number), juz = std::to_wstring(ayah.juz_number);
+    const int pos = (rub - 1) % 4;
+    if ((rub - 1) % 8 == 0) return L"بِدَايَةُ الجُزْءِ " + juz + L"، الحِزْبُ " + hizb;
+    if (pos == 0) return L"بِدَايَةُ الحِزْبِ " + hizb + L" مِنَ الجُزْءِ " + juz;
+    if (pos == 1) return L"رُبْعُ الحِزْبِ " + hizb;
+    if (pos == 2) return L"نِصْفُ الحِزْبِ " + hizb;
+    return L"ثَلَاثَةُ أَرْبَاعِ الحِزْبِ " + hizb;
+}
+
+inline std::wstring sajdah_spoken_vocalized(const std::wstring& verse_key) {
+    if (verse_key == L"41:37") return L"مَوْضِعُ سَجْدَةِ تِلَاوَةٍ عِنْدَ المَالِكِيَّةِ";
+    const SajdahPlace* p = find_sajdah_place(verse_key);
+    if (!p) return L"";
+    if (verse_key == L"41:38") return L"سَجْدَةٌ عِنْدَ الحَنَفِيَّةِ وَالشَّافِعِيَّةِ وَالحَنَابِلَةِ (وَعِنْدَ المَالِكِيَّةِ عِنْدَ الآيَةِ ٣٧)";
+    if (p->is_agreed()) return L"سَجْدَةُ تِلَاوَةٍ (مُتَّفَقٌ عَلَيْهَا عِنْدَ الأَئِمَّةِ الأَرْبَعَةِ)";
+    std::vector<std::wstring> names;
+    if (p->hanafi)  names.push_back(L"الحَنَفِيَّةِ");
+    if (p->maliki)  names.push_back(L"المَالِكِيَّةِ");
+    if (p->shafii)  names.push_back(L"الشَّافِعِيَّةِ");
+    if (p->hanbali) names.push_back(L"الحَنَابِلَةِ");
+    std::wstring joined;
+    for (size_t i = 0; i < names.size(); ++i) {
+        if (i > 0) joined += L" وَ";
+        joined += names[i];
+    }
+    return L"سَجْدَةٌ عِنْدَ " + joined;
+}
+
 inline std::wstring division_spoken_text(const AyahInfo& ayah, bool en = false) {
     int rub = ayah.rub_el_hizb_number;
     if (rub < 2) return L"";
@@ -316,10 +348,10 @@ inline std::wstring build_ayah_accessible_name(
 
     std::wstring sajdah;
     if (speak_marks) {
-        if (edition_details) sajdah = sajdah_short_label(ayah.verse_key, en);
-        else if (print_sajdah_place(ayah.verse_key, false)) sajdah = en ? L"prostration of recitation" : L"سجدة تلاوة";
+        if (edition_details) sajdah = en ? sajdah_short_label(ayah.verse_key, true) : sajdah_spoken_vocalized(ayah.verse_key);
+        else if (print_sajdah_place(ayah.verse_key, false)) sajdah = en ? L"prostration of recitation" : L"سَجْدَةُ تِلَاوَةٍ";
     }
-    std::wstring div = (speak_marks && is_rub_start) ? division_spoken_text(ayah, en) : L"";
+    std::wstring div = (speak_marks && is_rub_start) ? (en ? division_spoken_text(ayah, true) : division_spoken_vocalized(ayah)) : L"";
     // إذا كانت علامات الوقف تُنطق فالسكتة مذكورة في موضعها من الآية
     std::wstring sakta;
     if (speak_marks && !speak_waqf) {

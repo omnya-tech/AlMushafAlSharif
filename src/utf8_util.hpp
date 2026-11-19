@@ -83,6 +83,12 @@ inline std::wstring words_ar(int n)   { return count_ar(n, L"كلمة واحدة
 inline std::wstring times_ar(int n)   { return count_ar(n, L"مرة واحدة", L"مرتان", L"مرات", L"مرةً", L"مرة"); }
 inline std::wstring ayahs_ar(int n)   { return count_ar(n, L"آية واحدة", L"آيتان", L"آيات", L"آيةً", L"آية"); }
 inline std::wstring rukus_ar(int n)   { return count_ar(n, L"ركوع واحد", L"ركوعان", L"ركوعات", L"ركوعًا", L"ركوع"); }
+// الصيغ نفسها مشكولة، للعرض المشكول في نوافذ البيانات
+inline std::wstring letters_ar_v(int n) { return count_ar(n, L"حَرْفٌ وَاحِدٌ", L"حَرْفَانِ", L"أَحْرُفٍ", L"حَرْفًا", L"حَرْفٍ"); }
+inline std::wstring words_ar_v(int n)   { return count_ar(n, L"كَلِمَةٌ وَاحِدَةٌ", L"كَلِمَتَانِ", L"كَلِمَاتٍ", L"كَلِمَةً", L"كَلِمَةٍ"); }
+inline std::wstring times_ar_v(int n)   { return count_ar(n, L"مَرَّةٌ وَاحِدَةٌ", L"مَرَّتَانِ", L"مَرَّاتٍ", L"مَرَّةً", L"مَرَّةٍ"); }
+inline std::wstring ayahs_ar_v(int n)   { return count_ar(n, L"آيَةٌ وَاحِدَةٌ", L"آيَتَانِ", L"آيَاتٍ", L"آيَةً", L"آيَةٍ"); }
+inline std::wstring rukus_ar_v(int n)   { return count_ar(n, L"رُكُوعٌ وَاحِدٌ", L"رُكُوعَانِ", L"رُكُوعَاتٍ", L"رُكُوعًا", L"رُكُوعٍ"); }
 
 inline std::wstring to_western_digits(const std::wstring& s) {
     std::wstring out = s;

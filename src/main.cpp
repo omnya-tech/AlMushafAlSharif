@@ -3575,7 +3575,7 @@ static LRESULT CALLBACK SidebarBookmarksSubclassProc(HWND hwnd, UINT msg, WPARAM
 }
 
 // بيانات السورة سطرًا سطرًا: لنافذة معلوماتها ولنافذة نسخ بياناتها
-static std::vector<std::wstring> build_surah_info_lines(int target_surah_num) {
+static std::vector<std::wstring> build_surah_info_lines(int target_surah_num, bool vocalized = false) {
             SurahInfo s = g_app->db->get_surah(target_surah_num);
             std::wstring s_name = s.name_arabic;
             auto s_ayahs = g_app->db->get_surah_ayahs(s.number);
@@ -3664,6 +3664,48 @@ static std::vector<std::wstring> build_surah_info_lines(int target_surah_num) {
                 }
                 lines.push_back(L"The name of Allah (الله) occurs: " + std::to_wstring(total_allah) + ((total_allah) == 1 ? L" time" : L" times") + L" • Sajdah places: " + std::to_wstring(sajdahs));
                 if (edition_details) lines.push_back(L"Surah summary: " + build_surah_heading(*g_app->db, s.number, true));
+            } else if (vocalized) {
+                // النافذة كما يراها المبصر ويسمعها قارئ الشاشة: مشكولة بإعرابها
+                const std::wstring ed_key = g_app->db->edition();
+                const std::wstring ed_name = ed_key == L"dar_almaarif" ? L"طَبْعَةُ دَارِ المَعَارِفِ"
+                                           : ed_key == L"madinah_1405" ? L"طَبْعَةُ المَدِينَةِ القَدِيمَةِ"
+                                           : ed_key == L"madinah" ? L"طَبْعَةُ المَدِينَةِ الحَدِيثَةِ"
+                                           : g_app->edition_short_label();
+                const std::wstring place = sh.type.empty() || !edition_details ? s.revelation_place : sh.type;
+                lines.push_back(L"اسْمُ السُّورَةِ: " + s.name_uthmani);
+                lines.push_back(L"تَرْتِيبُهَا فِي المُصْحَفِ: السُّورَةُ رَقْمُ " + std::to_wstring(s.number) + L" مِنْ 114");
+                lines.push_back(L"تَرْتِيبُ نُزُولِهَا: " + std::to_wstring(s.revelation_order));
+                lines.push_back(L"مَكَانُ النُّزُولِ: " + vocalize_marks_text(place));
+                if (!edition_details) {
+                    // بيان الاستثناء من خصائص طبعة دار المعارف
+                } else if (!sh.excepted_verses.empty()) {
+                    bool multi_exc = (sh.excepted_verses.find(L'،') != std::wstring::npos || sh.excepted_verses.find(L'-') != std::wstring::npos);
+                    std::wstring exc_txt = std::wstring(multi_exc ? L"الآيَاتُ المُسْتَثْنَاةُ: الآيَاتُ " : L"الآيَاتُ المُسْتَثْنَاةُ: الآيَةُ ") + to_arabic_digits(sh.excepted_verses);
+                    if (!sh.place_note.empty()) exc_txt += L" (" + vocalize_marks_text(to_arabic_digits(sh.place_note)) + L")";
+                    lines.push_back(exc_txt);
+                } else {
+                    lines.push_back(L"الآيَاتُ المُسْتَثْنَاةُ: لَا تُوجَدُ آيَاتٌ مُسْتَثْنَاةٌ فِي هَذِهِ السُّورَةِ");
+                    if (!sh.place_note.empty()) lines.push_back(L"مُلَاحَظَةُ النُّزُولِ: " + vocalize_marks_text(to_arabic_digits(sh.place_note)));
+                }
+                lines.push_back(L"عَدَدُ آيَاتِهَا (بِالعَدِّ الكُوفِيِّ): " + ayahs_ar_v(s.verses_count));
+                lines.push_back(L"صَفَحَاتُهَا (" + ed_name + L"): " + (s.start_page == s.end_page
+                    ? (L"الصَّفْحَةُ " + std::to_wstring(s.start_page))
+                    : (L"مِنَ الصَّفْحَةِ " + std::to_wstring(s.start_page) + L" إِلَى " + std::to_wstring(s.end_page))));
+                lines.push_back(L"نِطَاقُ الأَجْزَاءِ: " + (min_juz == max_juz ? (L"الجُزْءُ " + std::to_wstring(min_juz))
+                    : (L"مِنَ الجُزْءِ " + std::to_wstring(min_juz) + L" إِلَى الجُزْءِ " + std::to_wstring(max_juz))));
+                lines.push_back(L"الرُّكُوعَاتُ فِي السُّورَةِ: " + rukus_ar_v(ruku_cnt) + (min_ruku == max_ruku
+                    ? (L" (الرُّكُوعُ " + std::to_wstring(min_ruku) + L")")
+                    : (L" (مِنَ الرُّكُوعِ " + std::to_wstring(min_ruku) + L" إِلَى " + std::to_wstring(max_ruku) + L")")));
+                lines.push_back(L"عَدَدُ الكَلِمَاتِ: " + words_ar_v(total_words));
+                lines.push_back(L"عَدَدُ الحُرُوفِ فِي السُّورَةِ: " + letters_ar_v(total_letters) + L" (دُونَ التَّشْكِيلِ وَالمَسَافَاتِ)");
+                if (!surah_letter_freq.empty()) lines.push_back(L"تَفْصِيلُ الحُرُوفِ فِي السُّورَةِ: " + surah_letter_freq);
+                if (longest_ayah > 0) {
+                    lines.push_back(L"أَطْوَلُ آيَةٍ: الآيَةُ " + std::to_wstring(longest_ayah) + L" (" + letters_ar_v(longest_letters) +
+                                    L") • أَقْصَرُ آيَةٍ: الآيَةُ " + std::to_wstring(shortest_ayah) + L" (" + letters_ar_v(shortest_letters) + L")");
+                }
+                lines.push_back(L"وُرُودُ لَفْظِ الجَلَالَةِ «اللَّه»: " + (total_allah ? times_ar_v(total_allah) : std::wstring(L"لَمْ يَرِدْ فِي السُّورَةِ")) +
+                                L" • مَوَاضِعُ السُّجُودِ: " + (sajdahs ? std::to_wstring(sajdahs) : std::wstring(L"لَا تُوجَدُ")));
+                if (edition_details) lines.push_back(L"بَيَانُ السُّورَةِ: " + build_surah_heading(*g_app->db, s.number, false, true));
             } else {
                 lines.push_back(L"اسم السورة: سورة " + s.name_arabic);
                 lines.push_back(L"ترتيبها في المصحف: السورة رقم " + std::to_wstring(s.number) + L" من 114");
@@ -4576,10 +4618,14 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         case IDM_SURAH_INFO: {
             const int n = g_app->take_context_surah();
             const std::wstring name = g_app->db->get_surah(n).name_arabic;
-            auto lines = build_surah_info_lines(n);
+            auto lines = build_surah_info_lines(n, !g_app->is_en());
+            // عنوان النافذة مشكول: «مَعْلُومَاتٌ عَنْ سُورَةِ البَقَرَةِ»
+            std::wstring title_name = g_app->db->get_surah(n).name_uthmani;
+            const std::wstring nom = L"سُورَةُ";
+            if (title_name.compare(0, nom.size(), nom) == 0) title_name = L"سُورَةِ" + title_name.substr(nom.size());
             show_line_reader_dialog(
                 hwnd,
-                g_app->tr(L"معلومات عن سورة " + name, L"Surah " + name + L" — information"),
+                g_app->tr(L"مَعْلُومَاتٌ عَنْ " + title_name, L"Surah " + name + L" — information"),
                 lines, g_app->is_en(), g_app->font_ui, &ScreenReaderEngine::instance()
             );
             return 0;
@@ -5189,7 +5235,63 @@ static int run_self_test() {
             SELFTEST_CHECK(app.db->get_ayah(41, 37, f37) && app.db->get_ayah(41, 38, f38));
             SELFTEST_CHECK(app.db->edition_has_details());
             SELFTEST_CHECK(app.format_visual_ayah(f37).find(L"۩") != std::wstring::npos);
-            SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"المالكية") != std::wstring::npos);
+            SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"المَالِكِيَّةِ") != std::wstring::npos);
+
+            // بيان كل سورة مشكول كله في الطبعات الثلاث: لا كلمة عربية بلا حركة
+            {
+                auto unvocalized = [](const std::wstring& t) {
+                    std::wstring bad, word;
+                    auto flush = [&]() {
+                        bool letters = false, marks = false;
+                        for (wchar_t ch : word) {
+                            if ((ch >= 0x0621 && ch <= 0x064A) || ch == 0x0671) letters = true;
+                            if ((ch >= 0x064B && ch <= 0x0655) || ch == 0x0670 || ch == 0x06E1) marks = true;
+                        }
+                        // «طه» اسم سورة يُكتب في المصحف بلا حركات، كسائر أسماء الحروف المقطعة
+                        if (letters && !marks && word != L"طه") bad += word + L" ";
+                        word.clear();
+                    };
+                    for (wchar_t ch : t) {
+                        if (ch == L' ' || ch == L'\u060C' || ch == L'(' || ch == L')' || ch == L':' || ch == L'\u061B' || ch == L'-') flush();
+                        else word.push_back(ch);
+                    }
+                    flush();
+                    return bad;
+                };
+                int bad_count = 0;
+                for (const wchar_t* ed : {L"dar_almaarif", L"madinah", L"madinah_1405"}) {
+                    app.db->set_edition(ed);
+                    for (int n = 1; n <= 114; ++n) {
+                        const std::wstring shown = app.db->edition_has_details()
+                            ? build_surah_heading(*app.db, n, false, true)
+                            : vocalize_marks_text(build_surah_brief(app.db->get_surah(n)));
+                        const std::wstring bad = unvocalized(shown);
+                        if (!bad.empty()) {
+                            ++bad_count;
+                            std::printf("unvocalized heading: %ls surah %d: %s\n", ed, n, to_utf8(bad).c_str());
+                        }
+                    }
+                }
+                // ونافذة بيانات السورة كذلك، إلا سطر تفصيل الحروف فهو حروف مفردة
+                MushafAppWindow* saved_app = g_app;
+                g_app = &app;
+                for (const wchar_t* ed : {L"dar_almaarif", L"madinah", L"madinah_1405"}) {
+                    app.db->set_edition(ed);
+                    for (int n = 1; n <= 114; ++n) {
+                        for (const auto& ln : build_surah_info_lines(n, true)) {
+                            if (ln.rfind(L"تَفْصِيلُ", 0) == 0 || ln.rfind(L"۞ ", 0) == 0) continue;
+                            const std::wstring bad = unvocalized(ln);
+                            if (!bad.empty()) {
+                                ++bad_count;
+                                std::printf("unvocalized info: %ls surah %d: %s\n", ed, n, to_utf8(bad).c_str());
+                            }
+                        }
+                    }
+                }
+                g_app = saved_app;
+                app.db->set_edition(L"dar_almaarif");
+                SELFTEST_CHECK(bad_count == 0);
+            }
 
             // طبعة المدينة القديمة: ترتيبها الأول، ومطابقة للمصحف بلا تفاصيل المذاهب
             SELFTEST_CHECK(app.db->editions().size() >= 3 && app.db->editions()[1].key == L"madinah_1405");
@@ -5208,7 +5310,8 @@ static int run_self_test() {
             SELFTEST_CHECK(app.db->get_ayah(100, 9, m1) && m1.page_number == 600);
             SELFTEST_CHECK(app.format_visual_ayah(f37).find(L"۩") == std::wstring::npos);
             SELFTEST_CHECK(app.format_visual_ayah(f38).find(L"۩") != std::wstring::npos);
-            SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"المالكية") == std::wstring::npos);
+            SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"المَالِكِيَّةِ") == std::wstring::npos);
+            SELFTEST_CHECK(app.format_spoken_ayah(f38).find(L"سَجْدَةُ تِلَاوَةٍ") != std::wstring::npos);
             SELFTEST_CHECK(app.margin_sajdah_lines(f37).empty());
             SELFTEST_CHECK(app.margin_sajdah_lines(f38).size() == 1);
             // الربع الذي يبدأ بأول السورة: علامته في الهامش بلا ۞ في سطر الآية
@@ -5217,6 +5320,7 @@ static int run_self_test() {
             SELFTEST_CHECK(app.format_visual_ayah(nisa1).find(L"۞") != 0);
             SELFTEST_CHECK(!app.margin_division_lines(nisa1).empty());
             SELFTEST_CHECK(app.format_visual_ayah(baq26).find(L"۞") == 0);
+            SELFTEST_CHECK(app.format_spoken_ayah(baq26).find(L"رُبْعُ الحِزْبِ 1") != std::wstring::npos);
         } else {
             SELFTEST_CHECK(false && "dar_almaarif edition did not load");
         }
