@@ -156,6 +156,9 @@ struct AyahListItemData {
     int height = 48;     // ارتفاع الصف بالبكسل (لا يتجاوز kRowMaxHeight)
     std::vector<std::wstring> lines;  // سطور الآية بعد اللفّ، تُرسم كما قيست تمامًا
     int line_h = 0;
+    // بيان السورة بجوار اسمها في سطر الترويسة نفسه (فارغ = الاسم وحده)، وحجم خطه بعد التصغير (٠ = الأصلي)
+    std::wstring sub_text;
+    int sub_px = 0;
 
     // سطر من سطور الطبعة (عرض «سطور الطبعة»): كلماته تُوزَّع على عرض السطر كالمصحف الورقي
     bool mushaf_line = false;
@@ -1412,6 +1415,52 @@ public:
         return std::max(120, w);
     }
 
+    // خط بيان السورة بحجم بكسل محدد (٠ = الحجم الأصلي)، محفوظ حتى لا يُنشأ مع كل رسم
+    HFONT details_font(int px) const {
+        if (px <= 0 || !font_details) return font_details;
+        auto f = details_fonts.find(px);
+        if (f != details_fonts.end()) return f->second;
+        LOGFONTW lf{};
+        GetObjectW(font_details, sizeof(lf), &lf);
+        lf.lfHeight = px;
+        HFONT small = CreateFontIndirectW(&lf);
+        details_fonts[px] = small;
+        return small;
+    }
+
+    static int single_line_width(HDC hdc, HFONT font, const std::wstring& text) {
+        HGDIOBJ prev = SelectObject(hdc, font);
+        RECT cr = {0, 0, 0, 0};
+        DrawTextW(hdc, text.c_str(), (int)text.size(), &cr, DT_CALCRECT | DT_SINGLELINE | DT_NOPREFIX | dt_reading_flag(hdc, true));
+        SelectObject(hdc, prev);
+        return (int)(cr.right - cr.left);
+    }
+
+    // بيان السورة الذي يُكتب بجوار اسمها في الترويسة، مشكولًا كما في المصحف
+    std::wstring surah_header_sub(const SurahInfo& s) const {
+        if (!db) return L"";
+        if (db->edition_has_details()) return build_surah_heading(*db, s.number, is_en(), !is_en());
+        if (db->edition() == L"madinah_1405") {
+            const std::wstring b = build_surah_brief(s, is_en());
+            return is_en() ? b : vocalize_marks_text(b);
+        }
+        return L"";   // المدينة الحديثة: الاسم وحده كمصحفها
+    }
+
+    // المسافة بين اسم السورة وبيانها في سطر الترويسة
+    int header_gap() const { return DS(34); }
+
+    // نص الترويسة المرئي والمنطوق: قارئ الشاشة ينطق البيان مشكولًا كما يراه المبصر
+    void fill_surah_header(AyahListItemData& hdr, const SurahInfo& s) const {
+        hdr.visual_text = s.name_uthmani;   // «سُورَةُ ...» داخل إطار مزخرف
+        hdr.sub_text = surah_header_sub(s);
+        hdr.spoken_text = is_en() ? (L"Surah " + s.name_arabic) : (L"سورة " + s.name_arabic);
+        if (!hdr.sub_text.empty()) {
+            const std::wstring spoken_sub = (is_en() && !db->edition_has_details()) ? build_surah_brief(s, true, true) : hdr.sub_text;
+            hdr.spoken_text += (is_en() ? L", " : L"، ") + spoken_sub;
+        }
+    }
+
     // حجم خط بيان السورة الذي يتسع به في سطر واحد (٠ = الحجم الأصلي)
     int details_font_px(HDC hdc, const std::wstring& text, int width) const {
         HGDIOBJ prev = SelectObject(hdc, font_details);
@@ -1426,16 +1475,7 @@ public:
     }
 
     HFONT font_for_item(const AyahListItemData& it) const {
-        if (it.kind == ListItemKind::SurahDetails && it.line_h > 0 && font_details) {
-            auto f = details_fonts.find(it.line_h);
-            if (f != details_fonts.end()) return f->second;
-            LOGFONTW lf{};
-            GetObjectW(font_details, sizeof(lf), &lf);
-            lf.lfHeight = it.line_h;
-            HFONT small = CreateFontIndirectW(&lf);
-            details_fonts[it.line_h] = small;
-            return small;
-        }
+        if (it.kind == ListItemKind::SurahDetails && it.line_h > 0 && font_details) return details_font(it.line_h);
         return font_for_kind(it.kind);
     }
 
@@ -1700,7 +1740,19 @@ public:
             // الترويسة: هامش الإطار + حشوة النص داخله + مسافة تنفّس
             int pad = (item.kind == ListItemKind::SurahHeader) ? (2 * DS(kHeaderInsetY) + DS(30)) : DS(kRowPadY) * 2;
             int h = 0;
-            if (item.kind == ListItemKind::SurahDetails) {
+            if (item.kind == ListItemKind::SurahHeader && !item.sub_text.empty() && font_details) {
+                // الاسم وبيانه في سطر واحد: يصغر خط البيان وحده حتى يتسع له ما بقي من السطر
+                const int name_w = single_line_width(hdc, font_header, item.visual_text);
+                const int avail = std::max(DS(60), width - name_w - header_gap());
+                item.sub_px = details_font_px(hdc, item.sub_text, avail);
+                TEXTMETRICW tn{}, ts{};
+                HGDIOBJ prev = SelectObject(hdc, font_header);
+                GetTextMetricsW(hdc, &tn);
+                SelectObject(hdc, details_font(item.sub_px));
+                GetTextMetricsW(hdc, &ts);
+                SelectObject(hdc, prev);
+                h = std::max(tn.tmAscent, ts.tmAscent) + std::max(tn.tmDescent, ts.tmDescent) + pad;
+            } else if (item.kind == ListItemKind::SurahDetails) {
                 item.line_h = details_font_px(hdc, item.visual_text, width);
                 HGDIOBJ prev = SelectObject(hdc, font_for_item(item));
                 TEXTMETRICW tm{};
@@ -1822,8 +1874,7 @@ public:
                 it.ayah.page_number = page;
                 if (ln.kind == EditionLineKind::SurahBanner) {
                     it.kind = ListItemKind::SurahHeader;
-                    it.visual_text = s.name_uthmani;
-                    it.spoken_text = is_en() ? (L"Surah " + s.name_arabic) : (L"سورة " + s.name_arabic);
+                    fill_surah_header(it, s);
                 } else {
                     it.kind = ListItemKind::Basmala;
                     it.visual_text = L"بِسْمِ ٱللَّهِ ٱلرَّحْمَـٰنِ ٱلرَّحِيمِ";
@@ -1910,33 +1961,11 @@ public:
                 hdr.kind = ListItemKind::SurahHeader;
                 hdr.ayah = a;
                 const bool edition_details = db->edition_has_details();
-                // طبعتا المدينة تكتبان اسم السورة وحده في إطارها
-                if (a.ayah_number == 1 || !edition_details) {
-                    hdr.visual_text = s.name_uthmani;   // «سُورَةُ ...» داخل إطار مزخرف
-                    hdr.spoken_text = is_en() ? (L"Surah " + s_name) : (L"سورة " + s_name);
-                } else {
-                    hdr.visual_text = s.name_uthmani + L"  —  " + place_txt + L" • " +
-                        (is_en() ? (std::to_wstring(s.verses_count) + L" verses")
-                                 : (L"آياتها " + num_str(s.verses_count)));
-                    hdr.spoken_text = is_en()
-                        ? (L"Surah " + s_name + L", " + place_txt + L", " + std::to_wstring(s.verses_count) + L" verses")
-                        : (L"سورة " + s_name + L"، " + s.revelation_place + L"، آياتها " + std::to_wstring(s.verses_count));
-                }
+                // اسم السورة وبيانها في سطر واحد داخل الإطار: المدينة الحديثة الاسم وحده كمصحفها،
+                // والقديمة مكان النزول وعدد الآيات، ودار المعارف ترويسة الشمرلي
+                (void)edition_details; (void)place_txt; (void)s_name;
+                fill_surah_header(hdr, s);
                 add_ayah_list_row(hdc, hdr);
-
-                // المدينة الحديثة كمصحفها: اسم السورة وحده؛ والمدينة القديمة يُكتب تحته مكان النزول وعدد الآيات
-                if (a.ayah_number == 1 && (edition_details || db->edition() == L"madinah_1405")) {
-                    AyahListItemData det;
-                    det.kind = ListItemKind::SurahDetails;
-                    det.ayah = a;
-                    det.visual_text = edition_details ? build_surah_heading(*db, a.surah_number, is_en(), !is_en())
-                                                      : build_surah_brief(s, is_en());
-                    if (!edition_details && !is_en()) det.visual_text = vocalize_marks_text(det.visual_text);
-                    // قارئ الشاشة ينطق البيان مشكولًا كما يراه المبصر
-                    det.spoken_text = !is_en() ? det.visual_text
-                                     : (edition_details ? det.visual_text : build_surah_brief(s, true, true));
-                    add_ayah_list_row(hdc, det);
-                }
 
                 if (a.ayah_number == 1 && s.bismillah_pre) {
                     AyahListItemData bsm;
@@ -2599,7 +2628,7 @@ public:
                 if (db->edition_has_details()) {
                     set_clipboard_text(hwnd, build_surah_heading(*db, r->ayah.surah_number, is_en()));
                     say(tr(L"نُسخ بيان السورة", L"Copied the surah heading"));
-                } else if (r->kind == ListItemKind::SurahDetails) {
+                } else if (r->kind == ListItemKind::SurahDetails || !r->sub_text.empty()) {
                     set_clipboard_text(hwnd, build_surah_brief(db->get_surah(r->ayah.surah_number), is_en()));
                     say(tr(L"نُسخ بيان السورة", L"Copied the surah heading"));
                 } else {
@@ -4094,6 +4123,38 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                                   align | DT_SINGLELINE | dt_reading_flag(dis->hDC, true) | DT_NOPREFIX | DT_NOCLIP);
                         y += item.line_h;
                     }
+                } else if (item.kind == ListItemKind::SurahHeader && !item.sub_text.empty()) {
+                    // الاسم ثم بيانه في سطر واحد، متوسطان أفقيًا ومتحاذيان على خط الكتابة نفسه.
+                    // في القائمة المعكوسة يبدأ الإحداثي المنطقي من اليمين، فيقع الاسم يمين البيان
+                    HFONT sub_f = g_app->details_font(item.sub_px);
+                    const int name_w = g_app->single_line_width(dis->hDC, g_app->font_header, item.visual_text);
+                    const int sub_w = g_app->single_line_width(dis->hDC, sub_f, item.sub_text);
+                    const int gap = g_app->header_gap();
+                    TEXTMETRICW tn{}, ts{};
+                    SelectObject(dis->hDC, g_app->font_header);
+                    GetTextMetricsW(dis->hDC, &tn);
+                    SelectObject(dis->hDC, sub_f);
+                    GetTextMetricsW(dis->hDC, &ts);
+                    const int asc = std::max(tn.tmAscent, ts.tmAscent);
+                    const int line_h = asc + std::max(tn.tmDescent, ts.tmDescent);
+                    const int top = text_rc.top + std::max(0, (int)(text_rc.bottom - text_rc.top) - line_h) / 2;
+                    const int total = name_w + gap + sub_w;
+                    int x = text_rc.left + std::max(0, (int)(text_rc.right - text_rc.left) - total) / 2;
+                    const UINT f1 = DT_SINGLELINE | DT_NOPREFIX | DT_NOCLIP | dt_reading_flag(dis->hDC, true);
+                    RECT nr = {x, top + asc - tn.tmAscent, x + name_w, top + asc - tn.tmAscent + tn.tmHeight};
+                    SelectObject(dis->hDC, g_app->font_header);
+                    DrawTextW(dis->hDC, item.visual_text.c_str(), (int)item.visual_text.size(), &nr, f1 | DT_CENTER);
+                    // فاصل ذهبي صغير بين الاسم والبيان
+                    const int cx = x + name_w + gap / 2, cy = top + line_h / 2;
+                    HBRUSH gold = CreateSolidBrush(pal.selected_border);
+                    RECT dot = {cx - DS(3), cy - DS(3), cx + DS(3), cy + DS(3)};
+                    FillRect(dis->hDC, &dot, gold);
+                    DeleteObject(gold);
+                    x += name_w + gap;
+                    RECT sr = {x, top + asc - ts.tmAscent, x + sub_w, top + asc - ts.tmAscent + ts.tmHeight};
+                    SelectObject(dis->hDC, sub_f);
+                    DrawTextW(dis->hDC, item.sub_text.c_str(), (int)item.sub_text.size(), &sr,
+                              f1 | DT_CENTER);
                 } else {
                     if (item.kind == ListItemKind::SurahHeader) {
                         // توسيط رأسي لاسم السورة داخل الإطار
@@ -5263,11 +5324,11 @@ static int run_self_test() {
             SELFTEST_CHECK(app.format_spoken_ayah(f37).find(L"عِنْدَ مَالِكٍ") != std::wstring::npos);
             // ترويسات دار المعارف بنص الشمرلي
             SELFTEST_CHECK(build_surah_heading(*app.db, 28) ==
-                L"مكية إلا من آية ٥٢ إلى آية ٥٥ فمدنية وآية ٨٥ فبالجحفة أثناء الهجرة وآياتها ٨٨ نزلت بعد النمل");
+                L"مكية إلا من الآية ٥٢ إلى الآية ٥٥ فمدنية والآية ٨٥ فنزلت بالجحفة أثناء الهجرة وآياتها ٨٨ نزلت بعد النمل");
             SELFTEST_CHECK(build_surah_heading(*app.db, 18) ==
-                L"مكية إلا الآية ٢٨ ومن آية ٨٣ إلى آية ١٠١ فمدنية وآياتها ١١٠ نزلت بعد الغاشية");
+                L"مكية إلا الآية ٢٨ ومن الآية ٨٣ إلى الآية ١٠١ فمدنية وآياتها ١١٠ نزلت بعد الغاشية");
             SELFTEST_CHECK(build_surah_heading(*app.db, 14) ==
-                L"مكية إلا آيتي ٢٨، ٢٩ فمدنيتان وآياتها ٥٢ نزلت بعد نوح");
+                L"مكية إلا الآيتين ٢٨، ٢٩ فمدنيتان وآياتها ٥٢ نزلت بعد نوح");
             SELFTEST_CHECK(build_surah_heading(*app.db, 3) == L"مدنية وآياتها ٢٠٠ نزلت بعد الأنفال");
             SELFTEST_CHECK(build_surah_heading(*app.db, 96) == L"مكية وآياتها ١٩ وهي أول ما نزل من القرآن");
             SELFTEST_CHECK(build_surah_heading(*app.db, 9).find(L"فمكيتان") != std::wstring::npos);

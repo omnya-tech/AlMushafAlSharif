@@ -599,7 +599,7 @@ inline std::wstring strip_harakat(const std::wstring& t) {
 }
 
 // ترويسة السورة في طبعة دار المعارف على صيغة مصحف الشمرلي، مشكولة:
-// «مَكِّيَّةٌ إِلَّا مِنْ آيَةِ ٥٢ إِلَى آيَةِ ٥٥ فَمَدَنِيَّةٌ … وَآيَاتُهَا ٨٨ نَزَلَتْ بَعْدَ النَّمْلِ»
+// «مَكِّيَّةٌ إِلَّا مِنَ الآيَةِ ٥٢ إِلَى الآيَةِ ٥٥ فَمَدَنِيَّةٌ … وَآيَاتُهَا ٨٨ نَزَلَتْ بَعْدَ النَّمْلِ»
 inline std::wstring shamarly_heading_vocalized(const QuranDatabase& db, int surah_number) {
     SurahInfo s = db.get_surah(surah_number);
     SurahHeadingInfo h = db.get_surah_heading_info(surah_number);
