@@ -497,12 +497,12 @@ public:
         font_header = create_quran_font(pt_to_px(std::max(16, (int)(settings.quran_font_size * 0.8))), L"Amiri", FW_BOLD,
                                         kRowMaxHeight - 2 * DS(kHeaderInsetY) - DS(30));
         // بيان السورة سطر واحد بخط النسخ كما في المصاحف، ويصغر إن لم يتسع له السطر
-        font_details = create_quran_font(pt_to_px(std::max(14, (int)(settings.quran_font_size * 0.62))), L"Amiri", FW_NORMAL,
+        font_details = create_quran_font(pt_to_px(std::max(17, (int)(settings.quran_font_size * 0.74))), L"Amiri", FW_NORMAL,
                                          (kRowMaxHeight - 2 * DS(kRowPadY)) / 2);
 
-        font_margin = CreateFontW(pt_to_px(10), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+        font_margin = CreateFontW(pt_to_px(11), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                                   CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Amiri");
-        font_margin_big = CreateFontW(pt_to_px(13), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+        font_margin_big = CreateFontW(pt_to_px(15), 0, 0, 0, FW_BOLD, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
                                       CLIP_DEFAULT_PRECIS, CLEARTYPE_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Amiri");
 
         ThemePalette pal = get_theme_palette(effective_theme());
@@ -1929,8 +1929,9 @@ public:
                     det.visual_text = edition_details ? build_surah_heading(*db, a.surah_number, is_en(), !is_en())
                                                       : build_surah_brief(s, is_en());
                     if (!edition_details && !is_en()) det.visual_text = vocalize_marks_text(det.visual_text);
-                    det.spoken_text = edition_details ? build_surah_heading(*db, a.surah_number, is_en())
-                                                      : build_surah_brief(s, is_en(), true);
+                    // قارئ الشاشة ينطق البيان مشكولًا كما يراه المبصر
+                    det.spoken_text = !is_en() ? det.visual_text
+                                     : (edition_details ? det.visual_text : build_surah_brief(s, true, true));
                     add_ayah_list_row(hdc, det);
                 }
 
