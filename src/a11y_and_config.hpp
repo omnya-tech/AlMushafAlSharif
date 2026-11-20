@@ -277,6 +277,8 @@ struct AppSettings {
     bool sr_speak_waqf = false;        // نطق علامات الوقف بأسمائها (صلى، قلى، ج...) لقارئ الشاشة
     bool sr_speak_marks = true;        // نطق علامات الأجزاء والأحزاب والأرباع والسجدات مع الآية
     bool sapi_fallback = false;
+    bool auto_check_updates = true;    // البحث عن إصدار أحدث مرة في اليوم عند فتح البرنامج
+    std::wstring last_update_check;    // تاريخ آخر بحث تلقائي (YYYY-MM-DD)
     int last_surah = 1;
     int last_page = 1;
     int last_juz = 1;
@@ -413,6 +415,8 @@ struct AppSettings {
         get_int("window_h", window_h);
         get_bool("window_maximized", window_maximized);
         get_str("khatmah_verse_key", khatmah_verse_key);
+        get_bool("auto_check_updates", auto_check_updates);
+        get_str("last_update_check", last_update_check);
 
         bookmarks.clear();
         size_t bm_pos = raw.find("\"bookmarks\"");
@@ -516,6 +520,8 @@ struct AppSettings {
         oss << "  \"window_h\": " << window_h << ",\n";
         oss << "  \"window_maximized\": " << (window_maximized ? "true" : "false") << ",\n";
         oss << "  \"khatmah_verse_key\": \"" << json_escape(khatmah_verse_key) << "\",\n";
+        oss << "  \"auto_check_updates\": " << (auto_check_updates ? "true" : "false") << ",\n";
+        oss << "  \"last_update_check\": \"" << json_escape(last_update_check) << "\",\n";
         oss << "  \"bookmarks\": [";
         for (size_t i = 0; i < bookmarks.size(); ++i) {
             if (i > 0) oss << ", ";

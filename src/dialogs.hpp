@@ -412,6 +412,7 @@ struct OptionsDlgState {
     HWND combo_align = nullptr;
     HWND combo_theme = nullptr;
     HWND chk_letter_count = nullptr;
+    HWND chk_auto_update = nullptr;
 
     // Tab 2: قارئات الشاشة
     HWND chk_sr_auto_speak = nullptr;
@@ -670,6 +671,7 @@ static LRESULT CALLBACK OptionsWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARA
             st->settings->sr_speak_waqf = (SendMessageW(st->chk_sr_waqf, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->sr_speak_marks = (SendMessageW(st->chk_sr_marks, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->show_ayah_letter_count = (SendMessageW(st->chk_letter_count, BM_GETCHECK, 0, 0) == BST_CHECKED);
+            st->settings->auto_check_updates = (SendMessageW(st->chk_auto_update, BM_GETCHECK, 0, 0) == BST_CHECKED);
             st->settings->custom_shortcuts = st->pending_shortcuts;
 
             st->settings->save();
@@ -867,6 +869,9 @@ inline bool show_options_dialog(
 
     st.chk_letter_count = add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Show the letter count of each ayah (on screen and for screen readers)" : L"إظهار عدد حروف كل آية (على الشاشة ولقارئ الشاشة)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 306, 640, 28, dlg, (HMENU)625, hInst, nullptr));
     SendMessageW(st.chk_letter_count, BM_SETCHECK, settings.show_ayah_letter_count ? BST_CHECKED : BST_UNCHECKED, 0);
+
+    st.chk_auto_update = add_ctrl(st.tab1_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Check for program updates automatically at startup (once a day)" : L"البحث عن تحديثات البرنامج تلقائيًا عند فتحه (مرة في اليوم)", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 346, 640, 28, dlg, (HMENU)626, hInst, nullptr));
+    SendMessageW(st.chk_auto_update, BM_SETCHECK, settings.auto_check_updates ? BST_CHECKED : BST_UNCHECKED, 0);
 
     // ---------------- Tab 2: قارئات الشاشة ----------------
     st.chk_sr_auto_speak = add_ctrl(st.tab2_ctrls, CreateWindowExW(0, L"BUTTON", is_en ? L"Read the ayah automatically when you move to it with the arrows" : L"نطق الآية تلقائيًا عبر قارئ الشاشة فور الوقوف عليها بالأسهم", WS_CHILD | WS_TABSTOP | BS_AUTOCHECKBOX, 32, 70, 640, 28, dlg, (HMENU)630, hInst, nullptr));

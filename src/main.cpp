@@ -9,6 +9,7 @@
 #include <map>
 #include "shortcuts.hpp"
 #include "dialogs.hpp"
+#include "update_check.hpp"
 #include <commctrl.h>
 #include <shellapi.h>
 #include <unordered_map>
@@ -47,6 +48,8 @@ constexpr int kHeaderInsetY   = 8;
 constexpr int kToolbarHeight  = 52;
 constexpr UINT_PTR kRelayoutTimer = 1;
 constexpr UINT_PTR kControlsTimer = 2;     // إخفاء العلامات المرسومة بعد سكون الفأرة
+constexpr UINT_PTR kUpdateTimer = 3;       // البحث التلقائي عن التحديثات بعد ثوانٍ من فتح البرنامج
+constexpr UINT WM_UPDATE_RESULT = WM_APP + 40;   // نتيجة البحث عن التحديثات من خيطه
 constexpr UINT kControlsHideMs = 3000;
 // سهما التقليب للمبصر على جانبي صفحة المصحف: يُرسمان على خلفية النافذة دون أي عنصر تحكم،
 // فلا يراهما قارئ الشاشة ولا يدخلان في التنقل بلوحة المفاتيح.
@@ -136,6 +139,7 @@ enum MenuIds : UINT {
     IDM_SHORTCUTS_HELP   = 1301,
     IDM_ABOUT            = 1302,
     IDM_USER_GUIDE       = 1303,
+    IDM_CHECK_UPDATES    = 1304,
 };
 
 enum class ListItemKind {
@@ -210,7 +214,7 @@ static int run_sync_shortcuts(bool to_english) {
     HKEY hk = nullptr;
     if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\{AF7629F3-F29A-4FAD-ABF9-2A506A5375E6}_is1",
                       0, KEY_SET_VALUE, &hk) == ERROR_SUCCESS) {
-        const std::wstring name = std::wstring(to_english ? L"Al-Mushaf Al-Sharif" : L"المصحف الشريف") + L" 1.0.0";
+        const std::wstring name = std::wstring(to_english ? L"Al-Mushaf Al-Sharif" : L"المصحف الشريف") + L" " + kAppVersion;
         RegSetValueExW(hk, L"DisplayName", 0, REG_SZ, (const BYTE*)name.c_str(), (DWORD)((name.size() + 1) * sizeof(wchar_t)));
         RegCloseKey(hk);
     }
@@ -793,6 +797,7 @@ public:
         HMENU m_help = CreatePopupMenu();
         AppendMenuW(m_help, MF_STRING, IDM_USER_GUIDE,     lbl(L"دليل استخدام البرنامج...", L"User guide (in Arabic)...", IDM_USER_GUIDE).c_str());
         AppendMenuW(m_help, MF_STRING, IDM_SHORTCUTS_HELP, lbl(L"دليل اختصارات لوحة المفاتيح وقارئات الشاشة...", L"Keyboard and screen reader guide...", IDM_SHORTCUTS_HELP).c_str());
+        AppendMenuW(m_help, MF_STRING, IDM_CHECK_UPDATES,  tr(L"البحث عن تحديثات البرنامج...", L"Check for updates...").c_str());
         AppendMenuW(m_help, MF_STRING, IDM_ABOUT,          tr(L"حول برنامج المصحف الشريف...", L"About Al-Mushaf Al-Sharif...").c_str());
         AppendMenuW(mb, MF_POPUP, (UINT_PTR)m_help,        tr(L"الم&ساعدة", L"&Help").c_str());
 
@@ -2781,6 +2786,84 @@ public:
         if (r == IDYES) open_user_guide();
     }
 
+    // ------------------------------------------------------------------
+    // البحث عن التحديثات: يقرأ آخر إصدار من صفحة الإصدارات في خيط مستقل، فلا تتأخر الواجهة،
+    // ولا ينزّل شيئًا؛ إن وُجد إصدار أحدث سأل المستخدم عن فتح صفحة التنزيل في المتصفح
+    bool update_check_running = false;
+
+    struct UpdateThreadArg { HWND hwnd; bool manual; };
+    static DWORD WINAPI update_thread_proc(LPVOID p) {
+        std::unique_ptr<UpdateThreadArg> arg(static_cast<UpdateThreadArg*>(p));
+        auto* r = new UpdateCheckResult(fetch_latest_release());
+        r->manual = arg->manual;
+        if (!PostMessageW(arg->hwnd, WM_UPDATE_RESULT, 0, (LPARAM)r)) delete r;
+        return 0;
+    }
+
+    void start_update_check(bool manual) {
+        if (update_check_running) {
+            if (manual) say(tr(L"جارٍ البحث عن تحديثات", L"Already checking for updates"));
+            return;
+        }
+        update_check_running = true;
+        if (manual) say(tr(L"جارٍ البحث عن تحديثات البرنامج", L"Checking for updates"));
+        auto* arg = new UpdateThreadArg{hwnd, manual};
+        HANDLE th = CreateThread(nullptr, 0, update_thread_proc, arg, 0, nullptr);
+        if (th) {
+            CloseHandle(th);
+        } else {
+            delete arg;
+            update_check_running = false;
+        }
+    }
+
+    // البحث التلقائي مرة في اليوم على الأكثر، بعد ثوانٍ من فتح البرنامج
+    void maybe_auto_check_updates() {
+        if (!settings.auto_check_updates) return;
+        SYSTEMTIME st{};
+        GetLocalTime(&st);
+        wchar_t today[16];
+        swprintf(today, 16, L"%04u-%02u-%02u", st.wYear, st.wMonth, st.wDay);
+        if (settings.last_update_check == today) return;
+        settings.last_update_check = today;
+        settings.save();
+        SetTimer(hwnd, kUpdateTimer, 5000, nullptr);
+    }
+
+    void on_update_result(UpdateCheckResult* raw) {
+        std::unique_ptr<UpdateCheckResult> r(raw);
+        update_check_running = false;
+        const bool en = is_en();
+        const UINT dir = en ? 0 : (MB_RTLREADING | MB_RIGHT);
+        const std::wstring title = tr(L"البحث عن تحديثات", L"Check for updates");
+        auto ver = [&](const std::wstring& v) { return en ? v : to_arabic_digits(v); };
+        HWND prev_focus = GetFocus();
+        if (r->status == UpdateCheckResult::Status::Newer) {
+            const std::wstring msg = en
+                ? (L"A new version of Al-Mushaf Al-Sharif is available: " + r->latest_version +
+                   L".\nYour installed version: " + kAppVersion + L".\n\nOpen the download page in your browser?")
+                : (L"يتوفر إصدار جديد من برنامج المصحف الشريف: الإصدار " + ver(r->latest_version) +
+                   L".\nالإصدار المثبّت لديك: " + ver(kAppVersion) + L".\n\nهل تريد فتح صفحة التنزيل في المتصفح؟");
+            int ans = MessageBoxW(hwnd, msg.c_str(), title.c_str(), MB_YESNO | MB_ICONINFORMATION | MB_DEFBUTTON1 | dir);
+            if (ans == IDYES) ShellExecuteW(hwnd, L"open", r->page_url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        } else if (r->manual) {
+            std::wstring msg;
+            UINT icon = MB_ICONINFORMATION;
+            if (r->status == UpdateCheckResult::Status::UpToDate) {
+                msg = en ? (std::wstring(L"You are using the latest version (") + kAppVersion + L").")
+                         : (L"أنت تستخدم أحدث إصدار من البرنامج (الإصدار " + ver(kAppVersion) + L").");
+            } else if (r->status == UpdateCheckResult::Status::NoRelease) {
+                msg = tr(L"لم يُنشر إصدار للبرنامج على صفحة الإصدارات بعد.", L"No version has been published on the releases page yet.");
+            } else {
+                icon = MB_ICONWARNING;
+                msg = tr(L"تعذّر الاتصال بصفحة الإصدارات. تأكد من اتصالك بالإنترنت، ثم حاول مرة أخرى.",
+                         L"Could not reach the releases page. Check your internet connection, then try again.");
+            }
+            MessageBoxW(hwnd, msg.c_str(), title.c_str(), MB_OK | icon | dir);
+        }
+        if (prev_focus && IsWindow(prev_focus)) SetFocus(prev_focus);
+    }
+
     // اسم الوحدة الحالية بحسب طريقة التصفح، للنطق: «سورة البقرة»، «الصفحة ٥»، «الجزء ٣»...
     std::wstring unit_kind_word() const {
         const std::wstring& b = settings.browse_scope;
@@ -3972,7 +4055,17 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
         break;
     }
 
+    case WM_UPDATE_RESULT:
+        if (g_app) g_app->on_update_result(reinterpret_cast<UpdateCheckResult*>(lParam));
+        else delete reinterpret_cast<UpdateCheckResult*>(lParam);
+        return 0;
+
     case WM_TIMER:
+        if (wParam == kUpdateTimer && g_app) {
+            KillTimer(hwnd, kUpdateTimer);
+            g_app->start_update_check(false);
+            return 0;
+        }
         if (wParam == kControlsTimer && g_app) {
             g_app->hide_controls_if_idle();
             return 0;
@@ -4850,6 +4943,10 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             g_app->open_user_guide();
             return 0;
 
+        case IDM_CHECK_UPDATES:
+            g_app->start_update_check(true);
+            return 0;
+
         case IDM_CYCLE_EDITION: {
             const auto& eds = g_app->db->editions();
             if (eds.size() < 2) {
@@ -4914,7 +5011,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
             // الآية في رأس النافذة، ثم التعريف بالبرنامج
             std::vector<std::wstring> lines = g_app->is_en() ? std::vector<std::wstring>{
                 hifz_txt,
-                L"Al-Mushaf Al-Sharif — Version 1.0.0",
+                std::wstring(L"Al-Mushaf Al-Sharif — Version ") + kAppVersion,
                 L"The Noble Quran in the narration of Hafs from 'Asim, in the Uthmani script. "
                 L"Its pages can be browsed as laid out in three prints: the new and classic prints of the King Fahd "
                 L"Complex for the Printing of the Holy Quran in Madinah, and the Dar al-Maarif print in Egypt.",
@@ -4926,7 +5023,7 @@ static LRESULT CALLBACK MainWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM l
                 L"© 2026 Omnya Technology"
             } : std::vector<std::wstring>{
                 hifz_txt,
-                L"المصحف الشريف — الإصدار 1.0.0",
+                std::wstring(L"المصحف الشريف — الإصدار ") + kAppVersion,
                 L"القرآن الكريم برواية حفص عن عاصم، بالرسم العثماني، "
                 L"ويُتصفَّح بصفحات ثلاث طبعات: طبعتي مجمع الملك فهد لطباعة المصحف الشريف بالمدينة المنورة "
                 L"الحديثة والقديمة، وطبعة دار المعارف بمصر.",
@@ -5351,6 +5448,21 @@ static int run_self_test() {
                 SELFTEST_CHECK(items[1].second.find(L"من الآية") == std::wstring::npos);
                 app.settings.browse_scope = saved_scope;
             }
+            // البحث عن التحديثات: مقارنة الإصدارات وقراءة رد GitHub
+            SELFTEST_CHECK(compare_versions(L"v1.0.1", L"1.0.0") > 0);
+            SELFTEST_CHECK(compare_versions(L"1.0", L"1.0.0") == 0);
+            SELFTEST_CHECK(compare_versions(L"v1.2.0", L"1.10.0") < 0);
+            SELFTEST_CHECK(compare_versions(L"2.0.0-beta", L"1.9.9") > 0);
+            SELFTEST_CHECK(strip_version_prefix(L"v1.1.0") == L"1.1.0");
+            {
+                const std::string j = "{\"url\":\"x\",\"html_url\": \"https://github.com/omnya-tech/AlMushafAlSharif/releases/tag/v1.1.0\","
+                                      "\"tag_name\" : \"v1.1.0\",\"name\":\"\\u0627\\u0644\\u0645\"}";
+                std::wstring tag, url, name;
+                SELFTEST_CHECK(json_string_value(j, "tag_name", tag) && tag == L"v1.1.0");
+                SELFTEST_CHECK(json_string_value(j, "html_url", url) && url.find(L"/releases/tag/v1.1.0") != std::wstring::npos);
+                SELFTEST_CHECK(json_string_value(j, "name", name) && name == L"\u0627\u0644\u0645");
+                SELFTEST_CHECK(!json_string_value(j, "missing", name));
+            }
             // ترويسات دار المعارف بنص الشمرلي
             SELFTEST_CHECK(build_surah_heading(*app.db, 28) ==
                 L"مكية إلا من آية ٥٢ إلى آية ٥٥ فمدنية وآية ٨٥ فنزلت بالجحفة أثناء الهجرة وآياتها ٨٨ نزلت بعد النمل");
@@ -5757,6 +5869,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR lpCmdLine, int nCmdSho
     }
 
     app.offer_user_guide_once();
+    app.maybe_auto_check_updates();
 
     MSG msg;
     while (GetMessageW(&msg, nullptr, 0, 0)) {
