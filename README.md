@@ -1,12 +1,12 @@
 # المصحف الشريف — Al-Mushaf Al-Sharif
 
-برنامج لتلاوة القرآن الكريم ومراجعته وتدبّره، برواية حفص عن عاصم بالرسم العثماني، ويُتصفَّح بصفحات طبعتين:
-طبعة مجمع الملك فهد بالمدينة المنورة، وطبعة دار المعارف بمصر.
+برنامج لتلاوة القرآن الكريم ومراجعته وتدبّره، برواية حفص عن عاصم بالرسم العثماني، ويُتصفَّح بصفحات ثلاث طبعات:
+طبعتي مجمع الملك فهد بالمدينة المنورة، الحديثة والقديمة، وطبعة دار المعارف بمصر.
 يخدم المبصرين ومستخدمي قارئات الشاشة على حدٍّ سواء، ويعمل على ويندوز ٧ و٨٫١ و١٠ و١١ (٣٢ و٦٤ بت).
 
 من تطوير فريق Omnya Technology، هديةً للباحثين وعموم المسلمين.
 
-A Windows app for reading, reviewing and reflecting on the Noble Quran (Hafs from 'Asim, Uthmani script, with the page layout of either the King Fahd Complex print or the Dar al-Maarif print),
+A Windows app for reading, reviewing and reflecting on the Noble Quran (Hafs from 'Asim, Uthmani script, with the page layouts of the new and old King Fahd Complex (Madinah) prints and the Dar al-Maarif print, Egypt),
 built for sighted readers and screen reader users alike. Developed by Omnya Technology.
 
 ## المزايا
@@ -18,11 +18,13 @@ built for sighted readers and screen reader users alike. Developed by Omnya Tech
 - الآيات قائمة يقرؤها قارئ الشاشة آيةً آية، وتُرسم للمبصر بخط مجمع الملك فهد مع توسيط السطور كالمصحف.
 - زر التطبيقات على الآية: النسخ ومعلومات الآية والمفضلة وفاصل الختمة. وعلى عنوان السورة: معلومات السورة ونسخها.
 - معلومات تفصيلية عن الآية والسورة (عدد الكلمات والحروف، والاستثناءات في المكي والمدني، ومواضع التكرار).
-- سجدات التلاوة الخمس عشرة مع أقوال الأئمة الأربعة، والبحث الشامل، والانتقال السريع.
+- علامات الأجزاء والأحزاب والأرباع والسجدات والسكتات خارج إطار الصفحة، بزخارف على طراز حواشي المصحف الورقي.
+- طبعة دار المعارف تزيد ترويسات السور كما في مصحف الشمرلي، وأقوال المذاهب الأربعة في السجدات.
+- سجدات التلاوة الخمس عشرة، والبحث الشامل، والانتقال السريع.
 - واجهة عربية وإنجليزية؛ ونص القرآن وأسماء السور تبقى بالعربية في الواجهتين.
 - تكامل مباشر مع NVDA و JAWS، وصوت ويندوز المدمج عند عدم وجود قارئ شاشة.
 
-## إضافة طبعة أخرى (مثل طبعة دار المعارف)
+## إضافة طبعة أخرى
 
 الطبعات تختلف في تقسيم الصفحات فقط، فتُضاف بملف فيه الآية التي تبدأ بها كل صفحة،
 دون أي تغيير في الكود:
@@ -63,6 +65,7 @@ bin\AlMushafAlSharif-x64.exe --self-test
 | `src/app.rc`, `src/app.manifest` | الأيقونة ومعلومات الإصدار ومظهر ويندوز الحديث |
 | `assets/` | قاعدة البيانات والخطوط وصوت تقليب الصفحة والأيقونة |
 | `third_party/sqlite3/` | مكتبة SQLite (ملكية عامة) |
+| `bin/nvdaControllerClient*.dll` | مكتبة NVDA للنطق المباشر بقارئ الشاشة NVDA (LGPL 2.1) |
 | `installer.iss` | ملف تثبيت Inno Setup |
 
 تُحفظ إعدادات المستخدم في `%APPDATA%\AlMushafAlSharif\settings.json`.
@@ -86,3 +89,4 @@ Free to use, copy and distribute unchanged; not for sale. Full terms in Arabic a
 
 تُوزَّع الخطوط كما هي دون أي تعديل، ونص كل رخصة مرفق معها في `assets/fonts/`.
 صوت تقليب الصفحة من OpenGameArt برخصة CC0 (التفاصيل في `assets/sounds/CREDITS.txt`).
+مكتبة NVDA Controller Client من [NV Access](https://github.com/nvaccess/nvda) برخصة GNU LGPL الإصدار ٢٫١، وتُوزَّع كما هي دون تعديل.
