@@ -17,7 +17,7 @@
    - خط حفص العثماني: اتفاقية مجمع الملك فهد لطباعة المصحف الشريف، ولا يجوز بيعه ولا تعديله (assets\fonts\LICENSE-KFGQPC.txt).
    - خطوط أميري وأميري قرآن وشهرزاد الجديد وكتاب: رخصة SIL للخطوط المفتوحة، الإصدار ١٫١ (assets\fonts).
    - مكتبة SQLite: ملكية عامة.
-   - مكتبة NVDA Controller Client من NV Access: رخصة GNU العمومية الصغرى (LGPL) الإصدار ٢٫١، وتُوزَّع كما هي دون تعديل (nvdaControllerClient32.dll و nvdaControllerClient64.dll)، ومصدرها: https://github.com/nvaccess/nvda
+   - مكتبة NVDA Controller Client من NV Access: رخصة GNU العمومية الصغرى (LGPL) الإصدار ٢٫١، وتُوزَّع كما هي دون تعديل (nvdaControllerClient32.dll و nvdaControllerClient64.dll)، ومصدرها: https://github.com/nvaccess/nvda، ونص الرخصة في الملف LGPL-2.1.txt
    - صوت تقليب الصفحة: ملكية عامة برخصة CC0 (assets\sounds\CREDITS.txt).
 
 ٧. إخلاء المسؤولية: يُقدَّم البرنامج «كما هو» دون أي ضمان صريح أو ضمني. وقد بُذل الجهد في مراجعة النص القرآني وبياناته، فإن وجدت خطأً فنرجو إبلاغ الفريق لتصحيحه. ولا يتحمّل الفريق مسؤولية أي ضرر ينشأ عن استخدام البرنامج أو تعذّر استخدامه.
@@ -43,7 +43,7 @@ Omnya Technology offers this program as a gift, seeking only the pleasure of All
    - KFGQPC HAFS Uthmanic Script font: the King Fahd Glorious Quran Printing Complex agreement; it may not be sold or modified (assets\fonts\LICENSE-KFGQPC.txt).
    - Amiri, Amiri Quran, Scheherazade New and Kitab fonts: SIL Open Font License, Version 1.1 (assets\fonts).
    - SQLite library: public domain.
-   - NVDA Controller Client library by NV Access: GNU Lesser General Public License (LGPL) version 2.1, distributed unmodified (nvdaControllerClient32.dll and nvdaControllerClient64.dll); source: https://github.com/nvaccess/nvda
+   - NVDA Controller Client library by NV Access: GNU Lesser General Public License (LGPL) version 2.1, distributed unmodified (nvdaControllerClient32.dll and nvdaControllerClient64.dll); source: https://github.com/nvaccess/nvda; full license text in LGPL-2.1.txt
    - Page-turn sound: public domain under CC0 (assets\sounds\CREDITS.txt).
 
 7. Disclaimer: The program is provided "as is", without any express or implied warranty. Every effort has been made to review the Quran text and its data; if you find an error, please report it to the team so it can be corrected. The team accepts no liability for any damage arising from the use of, or inability to use, the program.

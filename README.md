@@ -89,4 +89,4 @@ Free to use, copy and distribute unchanged; not for sale. Full terms in Arabic a
 
 تُوزَّع الخطوط كما هي دون أي تعديل، ونص كل رخصة مرفق معها في `assets/fonts/`.
 صوت تقليب الصفحة من OpenGameArt برخصة CC0 (التفاصيل في `assets/sounds/CREDITS.txt`).
-مكتبة NVDA Controller Client من [NV Access](https://github.com/nvaccess/nvda) برخصة GNU LGPL الإصدار ٢٫١، وتُوزَّع كما هي دون تعديل.
+مكتبة NVDA Controller Client من [NV Access](https://github.com/nvaccess/nvda) برخصة GNU LGPL الإصدار ٢٫١ ([`LGPL-2.1.txt`](legal/LGPL-2.1.txt))، وتُوزَّع كما هي دون تعديل.

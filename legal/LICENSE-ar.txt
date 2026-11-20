@@ -17,7 +17,7 @@
    - خط حفص العثماني: اتفاقية مجمع الملك فهد لطباعة المصحف الشريف، ولا يجوز بيعه ولا تعديله (assets\fonts\LICENSE-KFGQPC.txt).
    - خطوط أميري وأميري قرآن وشهرزاد الجديد وكتاب: رخصة SIL للخطوط المفتوحة، الإصدار ١٫١ (assets\fonts).
    - مكتبة SQLite: ملكية عامة.
-   - مكتبة NVDA Controller Client من NV Access: رخصة GNU العمومية الصغرى (LGPL) الإصدار ٢٫١، وتُوزَّع كما هي دون تعديل (nvdaControllerClient32.dll و nvdaControllerClient64.dll)، ومصدرها: https://github.com/nvaccess/nvda
+   - مكتبة NVDA Controller Client من NV Access: رخصة GNU العمومية الصغرى (LGPL) الإصدار ٢٫١، وتُوزَّع كما هي دون تعديل (nvdaControllerClient32.dll و nvdaControllerClient64.dll)، ومصدرها: https://github.com/nvaccess/nvda، ونص الرخصة في الملف LGPL-2.1.txt
    - صوت تقليب الصفحة: ملكية عامة برخصة CC0 (assets\sounds\CREDITS.txt).
 
 ٧. إخلاء المسؤولية: يُقدَّم البرنامج «كما هو» دون أي ضمان صريح أو ضمني. وقد بُذل الجهد في مراجعة النص القرآني وبياناته، فإن وجدت خطأً فنرجو إبلاغ الفريق لتصحيحه. ولا يتحمّل الفريق مسؤولية أي ضرر ينشأ عن استخدام البرنامج أو تعذّر استخدامه.
