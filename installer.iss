@@ -74,6 +74,8 @@ Source: "assets\*"; DestDir: "{app}\assets"; Flags: ignoreversion recursesubdirs
 ; نص الاتفاقية بالعربية والإنجليزية يبقى مع البرنامج المثبَّت
 Source: "legal\LICENSE-ar.txt"; DestDir: "{app}"; Flags: ignoreversion
 Source: "legal\LICENSE-en.txt"; DestDir: "{app}"; Flags: ignoreversion
+; نص رخصة LGPL لمكتبة NVDA المرفقة
+Source: "legal\LGPL-2.1.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{cm:AppName}"; Filename: "{app}\{#AppExeName}"; IconFilename: "{app}\assets\icon.ico"; Comment: "{cm:AppComment}"
